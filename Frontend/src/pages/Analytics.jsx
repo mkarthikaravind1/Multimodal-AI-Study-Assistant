@@ -116,7 +116,8 @@ export default function Analytics() {
         topic,
         student_class: classFor,
       });
-      setTimeout(()=>{setRegenSuccess(null)},5000)
+      setRegenSuccess(topic);
+      setTimeout(() => setRegenSuccess(null), 5000);
     } catch (err) {
       setRegenError(
         err.response?.data?.detail || "Regeneration failed. Try again."

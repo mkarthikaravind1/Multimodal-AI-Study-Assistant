@@ -24,14 +24,36 @@ from schemas import VideoAnalysisResponse
 router = APIRouter(prefix="/upload", tags=["Upload"])
 reader = easyocr.Reader(['en'])     #english
 
+MB = 1024 * 1024
+MAX_PDF_BYTES   = 20 * MB
+MAX_IMAGE_BYTES = 4 * MB     # Groq vision rejects base64 images much larger than this
+MAX_AUDIO_BYTES = 25 * MB    # Groq Whisper upload limit
+MAX_VIDEO_BYTES = 200 * MB
+
+
+def read_upload(file: UploadFile, max_bytes: int, label: str) -> bytes:
+    """
+    Reads at most max_bytes + 1 bytes so an oversized upload is rejected
+    without loading the whole file into memory.
+    """
+    data = file.file.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"{label} is too large. Maximum size is {max_bytes // MB} MB."
+        )
+    if not data:
+        raise HTTPException(status_code=400, detail=f"{label} is empty.")
+    return data
+
 @router.post("/pdf", response_model=PDFUploadResponse)
 def upload_pdf(file: UploadFile = File(...),db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
     # Step 1 — Validate file type
     if file.filename is None or not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
-    # Step 2 — Read file bytes
-    file_bytes = file.file.read()
+    # Step 2 — Read file bytes (size-limited)
+    file_bytes = read_upload(file, MAX_PDF_BYTES, "PDF")
 
     #Step 3 — Extract text from PDF using PyPDF
     pdf_reader = PdfReader(io.BytesIO(file_bytes))
@@ -102,8 +124,8 @@ def upload_image(
             detail=f"Only JPEG, PNG, and WebP images accepted. Got: {file.content_type}"
         )
  
-    image_bytes = file.file.read()
- 
+    image_bytes = read_upload(file, MAX_IMAGE_BYTES, "Image")
+
     # Step 1 — Get vision LLM answer
     answer = analyze_image(image_bytes, question)
  
@@ -197,7 +219,7 @@ def upload_audio(
         )
 
     # Step 2 — Read audio bytes
-    audio_bytes = file.file.read()
+    audio_bytes = read_upload(file, MAX_AUDIO_BYTES, "Audio")
 
     # Step 3 — Transcribe via Whisper
     transcript = transcribe_audio(audio_bytes, file.filename)   # type: ignore
@@ -229,17 +251,22 @@ def upload_video(
     # Step 2 — Save video to temp file
     # moviepy and opencv need a file PATH, not bytes
     # so we must write to disk first
+    video_bytes = read_upload(file, MAX_VIDEO_BYTES, "Video")
     with tempfile.NamedTemporaryFile(
-        suffix=".mp4",
+        suffix=os.path.splitext(file.filename or "")[1] or ".mp4",
         delete=False
     ) as temp_video:
-        temp_video.write(file.file.read())
+        temp_video.write(video_bytes)
         temp_video_path = temp_video.name
+    del video_bytes
 
     try:
         # Step 3 — Full video analysis (audio + frames)
         print(f"[Video] Starting analysis of {file.filename}...")
-        result = analyze_video(temp_video_path, file.filename)   # type: ignore
+        try:
+            result = analyze_video(temp_video_path, file.filename)   # type: ignore
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
         # Step 4 — Store combined summary in ChromaDB for RAG
         combined_text = result["combined_summary"]

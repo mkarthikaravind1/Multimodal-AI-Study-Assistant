@@ -56,6 +56,7 @@ class QuizDetail(Base):
     incorrect_answers = Column(Integer, nullable=False)
     score_percentage = Column(DECIMAL(5, 2), nullable=False)
     attempted_at = Column(DateTime, default=datetime.utcnow)
+    submitted_at = Column(DateTime, nullable=True)   # NULL = generated but not submitted yet
     user_id = Column(Integer, ForeignKey("user_details.user_id"), nullable=False)
     note_id = Column(Integer, ForeignKey("notes.note_id"), nullable=False)
 

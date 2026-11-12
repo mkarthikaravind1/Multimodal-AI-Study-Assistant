@@ -15,28 +15,29 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 # Lower = more frames = more API calls = more detail but slower
 FRAME_INTERVAL_SECONDS = 30
 
-def extract_audio_from_video(video_path: str) -> bytes:
+def extract_audio_from_video(video_path: str) -> bytes | None:
     """
     Extracts audio track from video file.
-    Returns audio as bytes (mp3 format).
+    Returns audio as bytes (mp3 format), or None if the video has no audio
+    (e.g. a silent screen recording).
+    The video is always closed — on Windows an open handle would stop the
+    caller from deleting the temp video file.
     """
-    # Load video
     video = VideoFileClip(video_path)
+    try:
+        if video.audio is None:
+            return None
 
-    # Write audio to a temp file, then read as bytes
-    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_audio:
-        temp_audio_path = temp_audio.name
-    
-    if video.audio is None:
-        raise ValueError("The video has no audio track")
-    video.audio.write_audiofile(temp_audio_path, logger=None)  # logger=None suppresses output
-    video.close()
-
-    with open(temp_audio_path, "rb") as f:
-        audio_bytes = f.read()
-
-    os.unlink(temp_audio_path)  # clean up temp file
-    return audio_bytes
+        fd, temp_audio_path = tempfile.mkstemp(suffix=".mp3")
+        os.close(fd)   # moviepy opens the path itself
+        try:
+            video.audio.write_audiofile(temp_audio_path, logger=None)  # logger=None suppresses output
+            with open(temp_audio_path, "rb") as f:
+                return f.read()
+        finally:
+            os.unlink(temp_audio_path)  # always clean up temp audio
+    finally:
+        video.close()
 
 
 def extract_key_frames(video_path: str) -> list[bytes]:
@@ -47,8 +48,9 @@ def extract_key_frames(video_path: str) -> list[bytes]:
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)                    # frames per second
     total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-    if fps<=0:
-        raise ValueError("Frames is less than or equal to zero")
+    if fps <= 0:
+        cap.release()   # release before raising so the file can be deleted
+        raise ValueError("Could not read the video's frame rate — the file may be corrupt.")
     duration = total_frames / fps                       # video duration in seconds
 
     frame_bytes_list = []
@@ -124,7 +126,14 @@ def analyze_video(video_path: str, filename: str) -> dict:
     # Step 1 — Extract and transcribe audio
     print(f"[Video] Extracting audio from {filename}...")
     audio_bytes = extract_audio_from_video(video_path)
-    transcript = transcribe_audio(audio_bytes, filename.replace(".mp4", ".mp3"))
+    if audio_bytes:
+        # The bytes are always mp3, so the name must end in .mp3 whatever the
+        # original extension was (.mov, .webm, .MP4 …) — Whisper uses it to detect format.
+        audio_filename = os.path.splitext(filename)[0] + ".mp3"
+        transcript = transcribe_audio(audio_bytes, audio_filename)
+    else:
+        print(f"[Video] {filename} has no audio track — using frames only.")
+        transcript = "(This video has no audio track.)"
 
     # Step 2 — Extract key frames
     print(f"[Video] Extracting key frames...")

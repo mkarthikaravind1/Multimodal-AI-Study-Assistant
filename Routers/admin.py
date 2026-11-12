@@ -35,7 +35,7 @@ def get_stats(db: Session = Depends(get_db), current_user: User = Depends(requir
     return {
         "total_users": db.query(User).count(),
         "total_notes": db.query(Note).count(),
-        "total_quizzes": db.query(QuizDetail).count(),
+        "total_quizzes": db.query(QuizDetail).filter(QuizDetail.submitted_at.isnot(None)).count(),
         "total_sessions": db.query(TutorSession).count(),
         "total_uploads": db.query(UploadedMaterial).count()
     }

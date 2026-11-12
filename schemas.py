@@ -37,6 +37,11 @@ class MCQQuestion(BaseModel):
     options: list[str]        # always 4 items
     correct_answer: str       # exact text of the correct option
 
+# What the student sees — no correct_answer, so the key can't be read in DevTools
+class MCQQuestionPublic(BaseModel):
+    question: str
+    options: list[str]
+
 # Request — what frontend sends
 class QuizRequest(BaseModel):
     note_id: int
@@ -46,7 +51,7 @@ class QuizRequest(BaseModel):
 class QuizResponse(BaseModel):
     quiz_id: int
     topic: str
-    questions: list[MCQQuestion]
+    questions: list[MCQQuestionPublic]
     total_questions: int
     message: str 
 

@@ -31,7 +31,7 @@ export default function Login() {
       });
 
       login(response.data.access_token);
-      navigate("/dashboard");
+      navigate("/");   // DefaultRedirect sends admins to /admin, students to /dashboard
 
     } catch (err) {
       setError(err.response?.data?.detail || "Login failed. Try again.");

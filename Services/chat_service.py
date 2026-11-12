@@ -7,11 +7,18 @@ load_dotenv()
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
+# Only the most recent messages are sent to the LLM. The full history is still
+# saved in MySQL — this just stops long sessions from blowing the token limit.
+MAX_HISTORY_MESSAGES = 12
+
 def get_tutor_reply(messages: list[ChatCompletionMessageParam], context_chunks: list[str]|None = None) -> str:
     """
     Calls Groq LLM with conversation history.
     If context_chunks provided, injects them into the last user message.
     """
+
+    # Step 0 — Keep only the recent window of the conversation
+    messages = messages[-MAX_HISTORY_MESSAGES:]
 
     # Step 1 — If we have retrieved context, augment the last user message
     if context_chunks and len(context_chunks) > 0 and len(messages) > 0:
