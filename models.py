@@ -105,3 +105,24 @@ class VivaSession(Base):
     max_score    = Column(Integer, nullable=False)
     started_at   = Column(DateTime, default=utcnow)
     completed_at = Column(DateTime, nullable=True)
+
+class Flashcard(Base):
+    """A spaced-repetition card (SM-2). Made from lessons, wrong quiz answers, weak viva answers, or by hand."""
+    __tablename__ = "flashcards"
+
+    card_id          = Column(Integer, primary_key=True, index=True)
+    user_id          = Column(Integer, ForeignKey("user_details.user_id"), nullable=False, index=True)
+    front            = Column(Text, nullable=False)
+    back             = Column(Text, nullable=False)
+    topic            = Column(String(255), nullable=True)
+    source           = Column(String(20), nullable=False, default="manual")   # note | mistake | viva | manual
+    note_id          = Column(Integer, ForeignKey("notes.note_id"), nullable=True)
+    quiz_id          = Column(Integer, ForeignKey("quiz_details.quiz_id"), nullable=True)
+    # SM-2 scheduling state
+    ease_factor      = Column(DECIMAL(4, 2), nullable=False, default=2.50)
+    interval_days    = Column(Integer, nullable=False, default=0)
+    repetitions      = Column(Integer, nullable=False, default=0)
+    lapses           = Column(Integer, nullable=False, default=0)
+    due_at           = Column(DateTime, nullable=False, default=utcnow, index=True)
+    last_reviewed_at = Column(DateTime, nullable=True)
+    created_at       = Column(DateTime, default=utcnow)

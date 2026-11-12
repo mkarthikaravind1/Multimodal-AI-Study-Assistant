@@ -93,6 +93,11 @@ export default function Dashboard() {
   const [analytics, setAnalytics] = useState(null); // { strong, weak, topic_breakdown }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [cardsDue, setCardsDue] = useState(0);
+
+  useEffect(() => {
+    api.get("/flashcards/stats").then((res) => setCardsDue(res.data.due_now)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -248,6 +253,28 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+
+        {/* ── flashcards due ── */}
+        {cardsDue > 0 && (
+          <div
+            className="rounded-2xl p-5 mb-6 flex items-center justify-between gap-4"
+            style={{ background: "#EEF2FF", border: "1px solid #C7D2FE" }}
+          >
+            <div>
+              <p className="text-sm font-semibold text-indigo-800">
+                🃏 {cardsDue} flashcard{cardsDue === 1 ? "" : "s"} due for review
+              </p>
+              <p className="text-xs text-indigo-600 mt-0.5">A few minutes now keeps them from slipping away.</p>
+            </div>
+            <button
+              onClick={() => navigate("/flashcards")}
+              className="flex-shrink-0 px-4 py-2 rounded-xl text-sm font-medium text-white hover:opacity-90"
+              style={{ background: "#4F46E5" }}
+            >
+              Review
+            </button>
+          </div>
+        )}
 
         {/* ── weak topic action ── */}
         {weakCount > 0 && !loading && (

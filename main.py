@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from Routers.admin import router as admin_router
 from Routers.learning import router as learning_router
 from Routers.viva import router as viva_router
+from Routers.flashcards import router as flashcards_router
 
 load_dotenv()
 
@@ -66,3 +67,4 @@ app.include_router(upload_router)
 app.include_router(admin_router)
 app.include_router(learning_router)
 app.include_router(viva_router)
+app.include_router(flashcards_router)

@@ -8,6 +8,7 @@ from schemas import MCQQuestionPublic, QuizRequest, QuizResponse, QuizSubmitRequ
 from Services.quiz_generator import generate_quiz, QuizGenerationError
 from auth import get_current_user
 from Services.learning_loop import PASS_MARK, loop_round
+from Services.flashcard_service import add_cards
 
 router = APIRouter(prefix="/quiz", tags=["Quiz"])
 
@@ -110,6 +111,13 @@ def submit_quiz(request: QuizSubmitRequest, db: Session = Depends(get_db), curre
     quiz.score_percentage = score               # type: ignore
     quiz.submitted_at = utcnow()       # type: ignore
     quiz.user_answers = submitted      # type: ignore  — needed to find mistakes for the learning loop
+
+    # Every wrong answer becomes a flashcard (no AI call — question + correct answer)
+    new_cards = add_cards(
+        db, int(quiz.user_id),     # type: ignore
+        [{"front": r.question, "back": r.correct_answer} for r in results if not r.is_correct],
+        source="mistake", topic=str(quiz.topic), note_id=quiz.note_id, quiz_id=quiz.quiz_id,   # type: ignore
+    )
     db.commit()
     db.refresh(quiz)
 
@@ -123,5 +131,6 @@ def submit_quiz(request: QuizSubmitRequest, db: Session = Depends(get_db), curre
         results=results,
         loop_round=loop_round(db, quiz),
         passed=score >= PASS_MARK,
+        flashcards_added=len(new_cards),
         message=f"Quiz submitted. You scored {score}%"
     )

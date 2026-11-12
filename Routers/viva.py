@@ -22,6 +22,9 @@ from schemas import (
     VivaState, VivaSummary,
 )
 from Services.viva_service import generate_viva_questions, grade_answer, VivaError
+from Services.flashcard_service import add_cards
+
+FLASHCARD_BELOW = 6     # viva answers scoring under 6/10 become flashcards
 
 router = APIRouter(prefix="/viva", tags=["Viva"])
 
@@ -130,13 +133,25 @@ def answer_question(viva_id: int, request: VivaAnswerRequest, db: Session = Depe
     viva.questions = questions                          # type: ignore
     flag_modified(viva, "questions")
 
+    # A weak answer becomes a flashcard: question → the examiner's model answer
+    added = []
+    if grading["score"] < FLASHCARD_BELOW and grading["ideal_answer"]:
+        added = add_cards(
+            db, cast(int, current_user.user_id),
+            [{"front": questions[index]["question"], "back": grading["ideal_answer"]}],
+            source="viva", topic=cast(str, viva.topic), note_id=cast(int, viva.note_id),
+        )
+
     if all(q.get("score") is not None for q in questions):
         viva.total_score = sum(q["score"] for q in questions)   # type: ignore
         viva.completed_at = utcnow()                             # type: ignore
 
     db.commit()
     db.refresh(viva)
-    return VivaAnswerResponse(result=_graded(questions[index]), question_index=index, state=_state(viva))
+    return VivaAnswerResponse(
+        result=_graded(questions[index]), question_index=index, state=_state(viva),
+        flashcard_added=bool(added),
+    )
 
 
 @router.get("/history", response_model=list[VivaSummary])

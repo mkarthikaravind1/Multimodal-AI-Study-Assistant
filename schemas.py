@@ -1,6 +1,6 @@
 #schemas.py
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from pydantic import BaseModel, Field, StringConstraints
 
 # Reusable constrained string types — whitespace is stripped first,
@@ -88,6 +88,7 @@ class QuizSubmitResponse(BaseModel):
     results: list[QuestionResult]   # breakdown per question
     loop_round: int = 1             # 1 = original quiz, 2+ = self-healing retest
     passed: bool = False            # score >= 70
+    flashcards_added: int = 0       # wrong answers turned into flashcards
     message: str
 
 # ── Self-healing learning loop ────────────────────────────────────────────────
@@ -225,6 +226,7 @@ class VivaAnswerResponse(BaseModel):
     result: VivaGradedQuestion       # grading of the answer just given
     question_index: int
     state: VivaState                 # updated state (next question or finished)
+    flashcard_added: bool = False    # weak answers (< 6/10) become a flashcard
 
 class VivaSummary(BaseModel):
     viva_id: int
@@ -235,3 +237,55 @@ class VivaSummary(BaseModel):
     max_score: int
     finished: bool
     started_at: datetime | None
+
+# ── Flashcards (spaced repetition) ────────────────────────────────────────────
+CardFront = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+CardBack = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1500)]
+
+class FlashcardOut(BaseModel):
+    card_id: int
+    front: str
+    back: str
+    topic: str | None
+    source: str                      # note | mistake | viva | manual
+    note_id: int | None
+    due_at: datetime
+    interval_days: int
+    repetitions: int
+    lapses: int
+    ease_factor: float
+    previews: dict[str, str] | None = None   # {"again": "10m", "hard": "1d", "good": "1d", "easy": "4d"}
+
+class FlashcardCreate(BaseModel):
+    front: CardFront
+    back: CardBack
+    topic: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] | None = None
+
+class FlashcardUpdate(BaseModel):
+    front: CardFront | None = None
+    back: CardBack | None = None
+
+class FlashcardGenerateRequest(BaseModel):
+    note_id: int
+    count: int = Field(default=8, ge=3, le=15)
+
+class FlashcardGenerateResponse(BaseModel):
+    added: list[FlashcardOut]
+    skipped_duplicates: int
+    message: str
+
+class ReviewRequest(BaseModel):
+    rating: Literal["again", "hard", "good", "easy"]
+
+class FlashcardStats(BaseModel):
+    total: int
+    due_now: int
+    new: int                         # never reviewed
+    learning: int                    # reviewed, interval < 21 days
+    mastered: int                    # interval >= 21 days
+    reviewed_today: int
+    next_due_at: datetime | None     # when the next card becomes due (if none due now)
+
+class DueCards(BaseModel):
+    cards: list[FlashcardOut]
+    stats: FlashcardStats

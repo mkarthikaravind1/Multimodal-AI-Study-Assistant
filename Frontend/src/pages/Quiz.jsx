@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../api/axios";
 import MarkdownContent from "../components/MarkdownContent";
 import Spinner from "../components/Spinner";
@@ -335,6 +335,18 @@ function ResultsPhase({ result, onRetry, onRemediate, remediating, loopError }) 
       </div>
 
       <LoopCard result={result} onRemediate={onRemediate} remediating={remediating} loopError={loopError} />
+
+      {result.flashcards_added > 0 && (
+        <div className="rounded-2xl px-5 py-3 border border-indigo-100 bg-indigo-50 flex items-center justify-between gap-3">
+          <p className="text-xs text-indigo-700">
+            🃏 {result.flashcards_added} missed question{result.flashcards_added === 1 ? " was" : "s were"} added to your
+            flashcards — you'll review {result.flashcards_added === 1 ? "it" : "them"} until they stick.
+          </p>
+          <Link to="/flashcards" className="text-xs font-medium text-indigo-600 underline flex-shrink-0">
+            Review now
+          </Link>
+        </div>
+      )}
 
       {/* per-question breakdown */}
       <div className="flex flex-col gap-3">

@@ -76,6 +76,13 @@ function LessonCard({ lesson, isOpen, onToggle, highlight }) {
             >
               💬 Ask the tutor about this
             </button>
+            <button
+              type="button"
+              onClick={() => navigate("/flashcards", { state: { tab: "library", noteId: lesson.note_id } })}
+              className="px-3 py-1.5 rounded-xl text-xs font-medium border border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+            >
+              🃏 Make flashcards
+            </button>
             {links.map((url, i) => (
               <a
                 key={url}

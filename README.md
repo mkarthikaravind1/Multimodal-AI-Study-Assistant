@@ -31,6 +31,9 @@ An AI-powered learning platform that helps students learn better by generating q
   the questions you missed (including *why* your answer was wrong), then a fresh retest on the same concepts.
   Repeat until you pass (max 5 rounds). Analytics shows each topic's score history and status:
   *Needs work → In recovery → Recovered ✓*. Mastery uses your **last 3 attempts**, so recovery counts.
+- **Spaced-repetition flashcards (SM-2)** — cards made by AI from any lesson, plus every wrong quiz answer and
+  weak viva answer turned into a card automatically. A daily review queue (Again / Hard / Good / Easy, with keyboard
+  shortcuts) schedules each card right before you'd forget it. One-click export to Anki.
 - **Viva / oral-exam mode** — an AI examiner asks open-ended questions out loud (browser text-to-speech),
   you answer by voice (Whisper) or text, and each answer is graded 0–10 with feedback, a model answer
   and the key points you missed. Past vivas can be resumed or reviewed.
@@ -290,6 +293,11 @@ The platform has two independent content pipelines that converge at a single ret
 | POST | `/viva/{id}/answer` | Grade the answer to the current viva question |
 | GET | `/viva/history` | Past vivas |
 | GET | `/viva/{id}` | Resume or review a viva |
+| GET | `/flashcards/due` | Today's review queue (SM-2) |
+| POST | `/flashcards/{id}/review` | Rate a card: again / hard / good / easy |
+| POST | `/flashcards/generate` | AI flashcards from a lesson |
+| GET / POST | `/flashcards` | List / add cards (PATCH, DELETE `/flashcards/{id}`) |
+| GET | `/flashcards/export/anki` | Download all cards for Anki import |
 | GET | `/admin/users` | List all users *(admin only)* |
 | GET | `/admin/stats` | Platform usage stats *(admin only)* |
 

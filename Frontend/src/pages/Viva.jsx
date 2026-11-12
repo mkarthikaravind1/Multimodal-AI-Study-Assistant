@@ -397,6 +397,11 @@ function GradedPhase({ graded, viva, onNext }) {
         <p className="text-sm font-medium text-gray-800">{graded.result.question}</p>
       </div>
       <GradedCard result={graded.result}>
+        {graded.flashcard_added && (
+          <p className="text-xs text-indigo-600 bg-indigo-50 rounded-lg px-3 py-2">
+            🃏 Added to your flashcards with the model answer, so you can practise it.
+          </p>
+        )}
         <button
           type="button"
           onClick={onNext}
