@@ -1,5 +1,14 @@
 #schemas.py
-from pydantic import BaseModel
+from datetime import datetime
+from typing import Annotated
+from pydantic import BaseModel, Field, StringConstraints
+
+# Reusable constrained string types — whitespace is stripped first,
+# so "   " counts as empty and is rejected.
+Username = Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=50, pattern=r"^[A-Za-z0-9_.-]+$")]
+Password = Annotated[str, StringConstraints(min_length=8, max_length=72)]   # bcrypt only reads 72 bytes
+Topic = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+StudentClass = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
 
 # class RegisterRequest(BaseModel):
 #     username: str
@@ -7,8 +16,8 @@ from pydantic import BaseModel
 #     student_class: str
 
 class RegisterRequest(BaseModel):
-    username: str
-    password: str
+    username: Username      # 3-50 chars: letters, digits, _ . -
+    password: Password      # 8-72 chars
     #role: str
 
 class LoginRequest(BaseModel):
@@ -20,8 +29,8 @@ class TokenResponse(BaseModel):
     token_type:str = "bearer"
 
 class LessonRequest(BaseModel):
-    topic: str
-    student_class: str
+    topic: Topic
+    student_class: StudentClass
 
 class LessonResponse(BaseModel):
     note_id: int
@@ -45,7 +54,7 @@ class MCQQuestionPublic(BaseModel):
 # Request — what frontend sends
 class QuizRequest(BaseModel):
     note_id: int
-    topic: str
+    topic: Topic
 
 # Response — what frontend gets back
 class QuizResponse(BaseModel):
@@ -57,13 +66,13 @@ class QuizResponse(BaseModel):
 
 # One answer the student submits
 class SubmittedAnswer(BaseModel):
-    question: str       # must match exactly what was generated
-    user_answer: str    # what the student picked
+    question: str = Field(max_length=1000)       # must match exactly what was generated
+    user_answer: str = Field(max_length=1000)    # what the student picked
 
 # Full submission request
 class QuizSubmitRequest(BaseModel):
     quiz_id: int
-    answers: list[SubmittedAnswer]
+    answers: list[SubmittedAnswer] = Field(max_length=20)
 
 # Per question result — was it right or wrong?
 class QuestionResult(BaseModel):
@@ -93,8 +102,8 @@ class AnalyticsResponse(BaseModel):
     topic_breakdown:list[TopicAverage]
 
 class WeakTopicRequest(BaseModel):
-    topic: str
-    student_class: str
+    topic: Topic
+    student_class: StudentClass
 
 class ChatMessage(BaseModel):
     role: str       # "user" or "assistant"
@@ -102,7 +111,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     session_id: int | None = None    # None = start a new session
-    message: str
+    message: str = Field(min_length=1, max_length=4000)
     note_id: int | None = None       # optional — link chat to a specific note
 
 class ChatResponse(BaseModel):
@@ -121,7 +130,15 @@ class ImageAnalysisResponse(BaseModel):
     filename: str
     question: str
     answer: str
+    session_id: int      # tutor session the image Q&A was added to
     message: str
+
+class MaterialResponse(BaseModel):
+    material_id: int
+    filename: str
+    file_type: str
+    total_chunks: int
+    uploaded_at: datetime | None
 
 class AudioTranscriptResponse(BaseModel):
     filename: str

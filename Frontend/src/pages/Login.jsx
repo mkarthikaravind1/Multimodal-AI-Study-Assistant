@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import api from "../api/axios";
+import api, { getErrorMessage } from "../api/axios";
 
 export default function Login() {
   const { login } = useAuth();
@@ -34,7 +34,7 @@ export default function Login() {
       navigate("/");   // DefaultRedirect sends admins to /admin, students to /dashboard
 
     } catch (err) {
-      setError(err.response?.data?.detail || "Login failed. Try again.");
+      setError(getErrorMessage(err, "Login failed. Try again."));
     } finally {
       setLoading(false);
     }

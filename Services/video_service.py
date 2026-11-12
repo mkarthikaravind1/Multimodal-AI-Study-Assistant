@@ -11,9 +11,12 @@ load_dotenv()
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# How often to extract a frame — every 30 seconds by default
-# Lower = more frames = more API calls = more detail but slower
-FRAME_INTERVAL_SECONDS = 30
+# Frame sampling: at most MAX_FRAMES frames, evenly spaced across the video,
+# and never closer than MIN_FRAME_INTERVAL_SECONDS apart.
+# Each frame is one vision API call, so this caps the cost of any video at
+# MAX_FRAMES calls (the old fixed 30 s interval meant 120 calls for 1 hour).
+MAX_FRAMES = 8
+MIN_FRAME_INTERVAL_SECONDS = 5
 
 def extract_audio_from_video(video_path: str) -> bytes | None:
     """
@@ -42,7 +45,7 @@ def extract_audio_from_video(video_path: str) -> bytes | None:
 
 def extract_key_frames(video_path: str) -> list[bytes]:
     """
-    Extracts one frame every FRAME_INTERVAL_SECONDS from the video.
+    Extracts up to MAX_FRAMES evenly spaced frames from the video.
     Returns list of JPEG image bytes.
     """
     cap = cv2.VideoCapture(video_path)
@@ -53,10 +56,12 @@ def extract_key_frames(video_path: str) -> list[bytes]:
         raise ValueError("Could not read the video's frame rate — the file may be corrupt.")
     duration = total_frames / fps                       # video duration in seconds
 
+    interval = max(MIN_FRAME_INTERVAL_SECONDS, duration / MAX_FRAMES)
+
     frame_bytes_list = []
     current_second = 0
 
-    while current_second < duration:
+    while current_second < duration and len(frame_bytes_list) < MAX_FRAMES:
         # Jump to the frame at current_second
         frame_number = int(current_second * fps)
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
@@ -70,7 +75,7 @@ def extract_key_frames(video_path: str) -> list[bytes]:
         if success:
             frame_bytes_list.append(buffer.tobytes())
 
-        current_second += FRAME_INTERVAL_SECONDS
+        current_second += interval
 
     cap.release()
     return frame_bytes_list
@@ -179,6 +184,7 @@ KEY FRAME DESCRIPTIONS:
     combined_summary = summary_response.choices[0].message.content or ""
 
     return {
+        "has_audio": bool(audio_bytes),
         "transcript": transcript,
         "frame_descriptions": frame_descriptions,
         "combined_summary": combined_summary

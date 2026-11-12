@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../api/axios";
+import api, { getErrorMessage } from "../api/axios";
 
 function Spinner() {
   return (
@@ -120,7 +120,7 @@ export default function Analytics() {
       setTimeout(() => setRegenSuccess(null), 5000);
     } catch (err) {
       setRegenError(
-        err.response?.data?.detail || "Regeneration failed. Try again."
+        getErrorMessage(err, "Regeneration failed. Try again.")
       );
     } finally {
       setRegenerating(null);

@@ -124,10 +124,12 @@ cd project-name
 ```bash
 pip install -r requirements.txt
 
+python -m alembic upgrade head
+
 uvicorn main:app --reload
 ```
 
-Tables are created automatically in MySQL on first run via `Base.metadata.create_all`, so no manual migration step is needed — just make sure the database itself exists and `DATABASE_URL` points to it.
+The schema is managed with **Alembic** (`migrations/`). Create the empty MySQL database first and point `DATABASE_URL` at it; `python -m alembic upgrade head` then creates or updates all tables. After changing `models.py`, generate a migration with `python -m alembic revision --autogenerate -m "describe change"`.
 
 Backend runs at
 
@@ -153,13 +155,13 @@ Frontend runs at
 http://localhost:5173
 ```
 
-> **Note:** CORS in `main.py` is currently hardcoded to allow only `http://localhost:5173`. If your frontend runs on a different port or you deploy this elsewhere, update `allow_origins` in `main.py` accordingly.
+> **Note:** the backend allows requests from `http://localhost:5173` by default. To use another frontend URL, set `ALLOWED_ORIGINS` in `.env` (comma-separated). To point the frontend at another backend, set `VITE_API_URL` in `Frontend/.env.local` (see `Frontend/.env.example`).
 
 ---
 
 ## 🔑 Environment Variables
 
-Create a `.env` file in the project root:
+Copy `.env.example` to `.env` in the project root and fill it in:
 
 ```env
 GROQ_API_KEY=
@@ -167,6 +169,9 @@ GROQ_API_KEY=
 SECRET_KEY=
 
 DATABASE_URL=
+
+# optional, comma-separated
+ALLOWED_ORIGINS=http://localhost:5173
 ```
 
 ## System Architecture

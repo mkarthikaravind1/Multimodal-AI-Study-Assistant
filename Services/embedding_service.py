@@ -107,6 +107,16 @@ def retrieve_relevant_notes(query: str, user_id: int, n_results: int = 5) -> lis
     return tagged_chunks
 
 
+def delete_note_vectors(note_id: int):
+    """Removes every chunk of a note (used to roll back a failed save)."""
+    notes_collection.delete(where={"$and": [{"note_id": note_id}, {"source": "note"}]})
+
+
+def delete_material_vectors(material_id: int, source: str):
+    """Removes every chunk of an uploaded PDF / image / video."""
+    notes_collection.delete(where={"$and": [{"material_id": material_id}, {"source": source}]})
+
+
 def add_pdf_chunks_to_vectorstore(material_id: int, chunks: list[str], user_id: int, filename: str, source: str = "pdf") -> int:
     """
     Embeds all chunks in one batch and stores them in ChromaDB.

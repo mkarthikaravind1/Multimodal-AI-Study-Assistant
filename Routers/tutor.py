@@ -1,17 +1,46 @@
 #tutor.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime
 
-from database import get_db
+from database import get_db, utcnow
 from models import TutorSession, User
 from schemas import ChatRequest, ChatResponse, ChatMessage
 from Services.chat_service import get_tutor_reply
 from sqlalchemy.orm.attributes import flag_modified
-from Services.embedding_service import retrieve_relevant_notes 
+from Services.embedding_service import retrieve_relevant_notes
 from auth import get_current_user
 
 router = APIRouter(prefix="/chat", tags=["Tutor"])
+
+
+def load_or_new_session(db: Session, session_id: int | None, user_id: int, note_id: int | None = None) -> TutorSession:
+    """
+    Returns the user's existing session, or a NEW UNSAVED one.
+    New sessions are only written to MySQL by save_session(), after the AI
+    has replied — so a failed LLM call never leaves an empty session behind.
+    """
+    if session_id is not None:
+        session = db.query(TutorSession).filter(
+            TutorSession.session_id == session_id,
+            TutorSession.user_id == user_id
+        ).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return session
+
+    return TutorSession(user_id=user_id, note_id=note_id, messages=[], started_at=utcnow())
+
+
+def save_session(db: Session, session: TutorSession, history: list[dict]) -> TutorSession:
+    """Stores the full history and commits (inserting the session if it is new)."""
+    session.messages = history          # type: ignore
+    flag_modified(session, "messages")
+    if session.session_id is None:
+        db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
 
 @router.post("", response_model=ChatResponse)
 def chat(
@@ -19,49 +48,27 @@ def chat(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Step 1 — Fetch or create session (unchanged from Phase 9)
-    if request.session_id is not None:
-        session = db.query(TutorSession).filter(
-            TutorSession.session_id == request.session_id,
-            TutorSession.user_id == current_user.user_id
-        ).first()
+    # Step 1 — Fetch existing session or prepare a new (unsaved) one
+    session = load_or_new_session(db, request.session_id, current_user.user_id, request.note_id)  # type: ignore
 
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        history = session.messages      # type: ignore
-    else:
-        session = TutorSession(
-            user_id=current_user.user_id,
-            note_id=request.note_id,
-            messages=[],
-            started_at=datetime.utcnow()
-        )
-        db.add(session)
-        db.commit()
-        db.refresh(session)
-        history = []
-
-    # Step 2 — Append user message to history
+    # Step 2 — Copy history (don't mutate the ORM attribute in place) and add the user message
+    history = list(session.messages or [])     # type: ignore
     history.append({"role": "user", "content": request.message})
 
-    # Step 3 — Retrieve relevant notes from ChromaDB   ← NEW
+    # Step 3 — Retrieve relevant notes from ChromaDB
     context_chunks = retrieve_relevant_notes(
         query=request.message,
         user_id=current_user.user_id  # type: ignore
     )
 
-    # Step 4 — Get LLM reply with context injected     
+    # Step 4 — Get LLM reply with context injected (if this fails, nothing is saved)
     reply = get_tutor_reply(history, context_chunks=context_chunks)  # type: ignore
 
-    # Step 5 — Append assistant reply to history (unchanged)
+    # Step 5 — Append assistant reply to history
     history.append({"role": "assistant", "content": reply})
 
-    # Step 6 — Save to MySQL (unchanged)
-    session.messages = history          # type: ignore
-    flag_modified(session, "messages")
-    db.commit()
-    db.refresh(session)
+    # Step 6 — Save to MySQL
+    session = save_session(db, session, history)
 
     return ChatResponse(
         session_id=session.session_id,  # type: ignore

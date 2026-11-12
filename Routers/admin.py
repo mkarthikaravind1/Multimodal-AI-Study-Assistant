@@ -1,7 +1,7 @@
 # routers/admin.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from database import get_db
+from database import get_db, as_utc
 from models import User
 from auth import get_current_user
 from models import Note, QuizDetail, TutorSession, UploadedMaterial
@@ -23,7 +23,7 @@ def get_all_users(db: Session = Depends(get_db), current_user: User = Depends(re
             "username": u.username,
             "student_class": u.student_class,
             "role": u.role,
-            "registered_date": u.registered_date
+            "registered_date": as_utc(u.registered_date)
             # never return password_hash
         }
         for u in users

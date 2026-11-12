@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import api from "../api/axios";
+import api, { getErrorMessage } from "../api/axios";
 import MarkdownContent from "../components/MarkdownContent";
 
 // ── icons ─────────────────────────────────────────────────────────────────────
@@ -221,6 +221,9 @@ export default function Tutor() {
   const [micError, setMicError]         = useState("");
   const mediaRecorderRef = useRef(null);
   const audioChunksRef   = useRef([]);
+  const streamRef        = useRef(null);
+  const unmountedRef     = useRef(false);
+  const objectUrlsRef    = useRef([]);   // every preview URL created, revoked on unmount
 
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
@@ -229,6 +232,18 @@ export default function Tutor() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sending]);
+
+  // ── cleanup on leaving the page: stop the mic, free preview URLs ───────────
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      objectUrlsRef.current = [];
+    };
+  }, []);
 
   // ── file selection ───────────────────────────────────────────────────────────
   function handleFileChange(e) {
@@ -243,13 +258,17 @@ export default function Tutor() {
     const previewUrl = (type === "image" || type === "video")
       ? URL.createObjectURL(file)
       : null;
+    if (previewUrl) objectUrlsRef.current.push(previewUrl);
     setAttachment({ file, type, previewUrl, status: "pending", result: null });
     setChatError("");
   }
 
   // ── FIX 1: removeAttachment is a proper function, no floating code ────────────
   function removeAttachment() {
-    if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    if (attachment?.previewUrl) {
+      URL.revokeObjectURL(attachment.previewUrl);
+      objectUrlsRef.current = objectUrlsRef.current.filter((u) => u !== attachment.previewUrl);
+    }
     setAttachment(null);
   }
 
@@ -257,7 +276,11 @@ export default function Tutor() {
   async function uploadFile(file, type, question) {
     const form = new FormData();
     form.append("file", file);
-    if (type === "image") form.append("question", question || "Explain this image in detail.");
+    if (type === "image") {
+      form.append("question", question || "Explain this image in detail.");
+      // the backend adds the image Q&A to this tutor session, so follow-ups have context
+      if (sessionId) form.append("session_id", String(sessionId));
+    }
     const endpoint = { pdf: "/upload/pdf", image: "/upload/image", video: "/upload/video" }[type];
     try {
       const res = await api.post(endpoint, form, {
@@ -265,7 +288,7 @@ export default function Tutor() {
       });
       return { ok: true, result: res.data };
     } catch (err) {
-      return { ok: false, error: err.response?.data?.detail || "Upload failed." };
+      return { ok: false, error: getErrorMessage(err, "Upload failed.") };
     }
   }
 
@@ -320,6 +343,7 @@ export default function Tutor() {
     // image: answer comes directly from upload response
     if (currentAttachment?.type === "image" && uploadResult?.answer) {
       setMessages((prev) => [...prev, { role: "assistant", content: uploadResult.answer, attachment: null }]);
+      setSessionId(uploadResult.session_id);
       setAttachment(null);
       setSending(false);
       return;
@@ -348,8 +372,9 @@ export default function Tutor() {
       setMessages((prev) => [...prev, { ...assistantReply, attachment: null }]);
       setSessionId(res.data.session_id);
     } catch (err) {
-      setChatError(err.response?.data?.detail || "Message failed. Try again.");
+      setChatError(getErrorMessage(err, "Message failed. Try again."));
       setMessages((prev) => prev.slice(0, -1));
+      setInput(text);   // give the user their question back so they can retry
     } finally {
       setSending(false);
       inputRef.current?.focus();
@@ -374,6 +399,7 @@ export default function Tutor() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
+      streamRef.current = stream;
       audioChunksRef.current = [];
 
       recorder.ondataavailable = (e) => {
@@ -382,11 +408,17 @@ export default function Tutor() {
 
       recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        if (unmountedRef.current) return;   // user left the page while recording
         setTranscribing(true);
         try {
-          const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+          // Chrome records webm, Firefox ogg, Safari mp4 — label the file with
+          // what was ACTUALLY recorded so Whisper can decode it
+          const mimeType = (recorder.mimeType || "audio/webm").split(";")[0];
+          const ext = { "audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "video/webm": "webm" }[mimeType] || "webm";
+          const blob = new Blob(audioChunksRef.current, { type: mimeType });
           const form = new FormData();
-          form.append("file", blob, "recording.webm");
+          form.append("file", blob, `recording.${ext}`);
           const res = await api.post("/upload/audio", form, {
             headers: { "Content-Type": "multipart/form-data" },
           });

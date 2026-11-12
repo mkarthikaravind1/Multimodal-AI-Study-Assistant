@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import api from "../api/axios";
+import api, { getErrorMessage } from "../api/axios";
 
 function Spinner() {
   return (
@@ -58,7 +58,7 @@ function SetupPhase({ onQuizGenerated }) {
       });
       onQuizGenerated(res.data);
     } catch (err) {
-      setError(err.response?.data?.detail || "Quiz generation failed. Try again.");
+      setError(getErrorMessage(err, "Quiz generation failed. Try again."));
     } finally {
       setGenerating(false);
     }
@@ -150,17 +150,17 @@ function SetupPhase({ onQuizGenerated }) {
 
 // ── PHASE 2: Answer questions ─────────────────────────────────────────────────
 function QuizPhase({ quiz, onSubmit, submitting }) {
-  const [answers, setAnswers] = useState({}); // { question: selectedOption }
+  const [answers, setAnswers] = useState({}); // { questionIndex: selectedOption } — index, so duplicate text can't collide
   const [error, setError] = useState("");
 
-  const allAnswered = quiz.questions.every((q) => answers[q.question]);
+  const allAnswered = quiz.questions.every((_, idx) => answers[idx] !== undefined);
 
   function handleSubmit() {
     if (!allAnswered) { setError("Please answer all questions before submitting."); return; }
     setError("");
-    const payload = quiz.questions.map((q) => ({
+    const payload = quiz.questions.map((q, idx) => ({
       question: q.question,
-      user_answer: answers[q.question],
+      user_answer: answers[idx],
     }));
     onSubmit(payload);
   }
@@ -187,12 +187,13 @@ function QuizPhase({ quiz, onSubmit, submitting }) {
             {q.question}
           </p>
           <div className="flex flex-col gap-2">
-            {q.options.map((opt) => {
-              const selected = answers[q.question] === opt;
+            {q.options.map((opt, optIdx) => {
+              const selected = answers[idx] === opt;
               return (
                 <button
-                  key={opt}
-                  onClick={() => setAnswers((prev) => ({ ...prev, [q.question]: opt }))}
+                  key={optIdx}
+                  type="button"
+                  onClick={() => setAnswers((prev) => ({ ...prev, [idx]: opt }))}
                   className="text-left px-4 py-3 rounded-xl text-sm border transition-all duration-150"
                   style={{
                     borderColor: selected ? "#4F46E5" : "#E5E7EB",
@@ -338,7 +339,7 @@ export default function Quiz() {
       setResult(res.data);
       setPhase("results");
     } catch (err) {
-      setSubmitError(err.response?.data?.detail || "Submission failed. Try again.");
+      setSubmitError(getErrorMessage(err, "Submission failed. Try again."));
     } finally {
       setSubmitting(false);
     }

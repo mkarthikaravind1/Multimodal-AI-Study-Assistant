@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import api from "../api/axios";
+import api, { getErrorMessage } from "../api/axios";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
@@ -48,6 +48,7 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [usersFailed, setUsersFailed] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -58,8 +59,13 @@ export default function Admin() {
         ]);
         if (statsRes.status === "fulfilled") setStats(statsRes.value.data);
         if (usersRes.status === "fulfilled") setUsers(usersRes.value.data);
-      } catch (err) {
-        setError(err.response?.data?.detail || "Failed to load admin data.");
+
+        // allSettled never throws — report failures explicitly
+        const failed = [statsRes, usersRes].find((r) => r.status === "rejected");
+        if (failed) {
+          setError(getErrorMessage(failed.reason, "Failed to load admin data."));
+          if (usersRes.status === "rejected") setUsersFailed(true);
+        }
       } finally {
         setLoading(false);
       }
@@ -174,8 +180,14 @@ export default function Admin() {
             </div>
           ) : filtered.length === 0 ? (
             <div className="py-14 flex flex-col items-center gap-2 text-center">
-              <span className="text-3xl">🔍</span>
-              <p className="text-sm text-gray-500">No users match your search.</p>
+              <span className="text-3xl">{usersFailed ? "⚠️" : "🔍"}</span>
+              <p className="text-sm text-gray-500">
+                {usersFailed
+                  ? "Could not load users."
+                  : users.length === 0
+                  ? "No users registered yet."
+                  : "No users match your search."}
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">

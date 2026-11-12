@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import api from "../api/axios";
+import api, { getErrorMessage } from "../api/axios";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -26,7 +26,7 @@ export default function Register() {
       // Registration successful — redirect to login
       navigate("/login");
     } catch (err) {
-      setError(err.response?.data?.detail || "Registration failed. Try again.");
+      setError(getErrorMessage(err, "Registration failed. Try again."));
     } finally {
       setLoading(false);
     }
@@ -60,7 +60,12 @@ export default function Register() {
               className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm
                          focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Choose a username"
+              minLength={3}
+              maxLength={50}
+              pattern="[A-Za-z0-9_.\-]+"
+              title="3-50 characters: letters, numbers, _ . -"
             />
+            <p className="text-xs text-gray-400 mt-1">3-50 characters: letters, numbers, _ . -</p>
           </div>
 
           <div>
@@ -76,7 +81,10 @@ export default function Register() {
               className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm
                          focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Choose a password"
+              minLength={8}
+              maxLength={72}
             />
+            <p className="text-xs text-gray-400 mt-1">At least 8 characters</p>
           </div>
           
             {/* <select

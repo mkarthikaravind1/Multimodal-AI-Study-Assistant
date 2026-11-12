@@ -7,11 +7,16 @@ load_dotenv()
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-def analyze_image(image_bytes: bytes, question: str) -> str:
+def analyze_image(image_bytes: bytes, question: str, mime_type: str = "image/jpeg") -> str:
     """
     Sends image + question to Groq Vision LLM.
     Returns the model's explanation/answer as a string.
+    mime_type must match the real image format (image/png, image/webp, …).
     """
+
+    # "image/jpg" is not a real MIME type — normalise it
+    if mime_type == "image/jpg":
+        mime_type = "image/jpeg"
 
     # Step 1 — Convert image bytes to base64 string
     # Vision LLMs don't accept raw binary — they need base64 encoded text
@@ -27,7 +32,7 @@ def analyze_image(image_bytes: bytes, question: str) -> str:
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": f"data:image/jpeg;base64,{base64_image}"
+                            "url": f"data:{mime_type};base64,{base64_image}"
                         }
                     },
                     {

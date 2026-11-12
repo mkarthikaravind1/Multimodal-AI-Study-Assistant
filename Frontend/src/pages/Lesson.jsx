@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import api from "../api/axios";
+import api, { getErrorMessage } from "../api/axios";
 import MarkdownContent from "../components/MarkdownContent";
 
 function Spinner() {
@@ -133,7 +133,7 @@ export default function Lesson() {
       setTopic("");
     } catch (err) {
       setFormError(
-        err.response?.data?.detail || "Generation failed. Please try again."
+        getErrorMessage(err, "Generation failed. Please try again.")
       );
     } finally {
       setGenerating(false);

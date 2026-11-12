@@ -1,11 +1,9 @@
-from datetime import datetime
-
 from sqlalchemy import (
     Column, Integer, String, DateTime,
-    Text, JSON, DECIMAL, ForeignKey, Enum, func
+    Text, JSON, DECIMAL, ForeignKey, Enum
 )
 from sqlalchemy.orm import relationship
-from database import Base
+from database import Base, utcnow
 import enum
 
 # Python enum to match MySQL ENUM
@@ -21,7 +19,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     student_class = Column(String(50))
     role = Column(Enum(RoleEnum), nullable=False, default=RoleEnum.student)
-    registered_date = Column(DateTime, default=datetime.utcnow)
+    registered_date = Column(DateTime, default=utcnow)
 
     # Relationships — lets you do user.notes, user.quizzes etc.
     notes = relationship("Note", back_populates="user")
@@ -37,7 +35,7 @@ class Note(Base):
     title = Column(String(255), nullable=False)
     content = Column(Text, nullable=False)
     youtube_links = Column(JSON)              # stored as array of URL strings
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
     user_id = Column(Integer, ForeignKey("user_details.user_id"), nullable=False)
 
     user = relationship("User", back_populates="notes")
@@ -55,7 +53,7 @@ class QuizDetail(Base):
     correct_answers = Column(Integer, nullable=False)
     incorrect_answers = Column(Integer, nullable=False)
     score_percentage = Column(DECIMAL(5, 2), nullable=False)
-    attempted_at = Column(DateTime, default=datetime.utcnow)
+    attempted_at = Column(DateTime, default=utcnow)
     submitted_at = Column(DateTime, nullable=True)   # NULL = generated but not submitted yet
     user_id = Column(Integer, ForeignKey("user_details.user_id"), nullable=False)
     note_id = Column(Integer, ForeignKey("notes.note_id"), nullable=False)
@@ -71,7 +69,7 @@ class TutorSession(Base):
     user_id = Column(Integer, ForeignKey("user_details.user_id"), nullable=False)
     note_id = Column(Integer, ForeignKey("notes.note_id"), nullable=True)  # nullable
     messages = Column(JSON, nullable=False)   # stores conversation history array
-    started_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, default=utcnow)
 
     user = relationship("User", back_populates="tutor_sessions")
     note = relationship("Note", back_populates="tutor_sessions")
@@ -84,6 +82,6 @@ class UploadedMaterial(Base):
     filename     = Column(String(255), nullable=False)
     file_type    = Column(String(50), nullable=False)
     total_chunks = Column(Integer, nullable=False)
-    uploaded_at  = Column(DateTime, default=datetime.utcnow)
+    uploaded_at  = Column(DateTime, default=utcnow)
 
     user = relationship("User", back_populates="materials")

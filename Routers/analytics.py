@@ -14,13 +14,17 @@ STRONG_THRESHOLD = 70.0   # >= 70% average = strong topic
 @router.get("", response_model=AnalyticsResponse)
 def get_analytics(db: Session = Depends(get_db),  current_user: User = Depends(get_current_user)):
 
-    # Step 1 & 2 — Group by topic, calculate average score
-    results = db.query(QuizDetail.topic,func.avg(QuizDetail.score_percentage)
+    # Step 1 & 2 — Group by topic (case-insensitive, so "Graphs" and "graphs"
+    # are one topic) and calculate the average score of SUBMITTED quizzes only
+    topic_key = func.lower(QuizDetail.topic)
+    results = db.query(
+        func.min(QuizDetail.topic),             # a display name for the group
+        func.avg(QuizDetail.score_percentage)
     ).filter(
         QuizDetail.user_id == current_user.user_id,
         QuizDetail.submitted_at.isnot(None)     # ignore generated-but-unsubmitted quizzes
     ).group_by(
-        QuizDetail.topic
+        topic_key
     ).all()
 
     # Step 3 — Split into strong/weak based on threshold

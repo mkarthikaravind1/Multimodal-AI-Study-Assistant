@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime
 
-from database import get_db
+from database import get_db, utcnow
+from Routers.lessons import normalize_topic
 from models import Note, QuizDetail, User
 from schemas import MCQQuestionPublic, QuizRequest, QuizResponse, QuizSubmitRequest, QuestionResult, QuizSubmitResponse
 from Services.quiz_generator import generate_quiz, QuizGenerationError
@@ -21,20 +21,22 @@ def generate_quiz_route(request: QuizRequest, db: Session = Depends(get_db), cur
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 
+    topic = normalize_topic(request.topic)
+
     try:
-        questions = generate_quiz(str(note.content), request.topic)
+        questions = generate_quiz(str(note.content), topic)
     except QuizGenerationError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
     # Full questions (with answers) are stored server-side only
     new_quiz = QuizDetail(
-        topic=request.topic.strip(),
+        topic=topic,
         questions=questions,
         total_questions=len(questions),
         correct_answers=0,
         incorrect_answers=0,
         score_percentage=0.00,
-        attempted_at=datetime.utcnow(),
+        attempted_at=utcnow(),
         submitted_at=None,
         user_id=current_user.user_id,
         note_id=note.note_id
@@ -105,7 +107,7 @@ def submit_quiz(request: QuizSubmitRequest, db: Session = Depends(get_db), curre
     quiz.correct_answers = correct_count        # type: ignore
     quiz.incorrect_answers = incorrect_count    # type: ignore
     quiz.score_percentage = score               # type: ignore
-    quiz.submitted_at = datetime.utcnow()       # type: ignore
+    quiz.submitted_at = utcnow()       # type: ignore
     db.commit()
     db.refresh(quiz)
 
