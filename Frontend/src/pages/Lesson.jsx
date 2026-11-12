@@ -1,15 +1,27 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../api/axios";
 import MarkdownContent from "../components/MarkdownContent";
 import Spinner from "../components/Spinner";
 import usePageTitle from "../hooks/usePageTitle";
 
-function LessonCard({ lesson, isOpen, onToggle }) {
+function LessonCard({ lesson, isOpen, onToggle, highlight }) {
   const navigate = useNavigate();
   const links = lesson.youtube_links ?? [];
+  const cardRef = useRef(null);
+
+  // Opened from a tutor citation → scroll to it
+  useEffect(() => {
+    if (highlight) cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [highlight]);
+
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+    <div
+      ref={cardRef}
+      className={`bg-white border rounded-2xl shadow-sm overflow-hidden transition-shadow ${
+        highlight ? "border-indigo-300 ring-2 ring-indigo-100" : "border-gray-100"
+      }`}
+    >
       {/* ── header (always visible) ── */}
       <button
         onClick={onToggle}
@@ -92,7 +104,9 @@ export default function Lesson() {
   // ── lessons list state ──────────────────────────────────────────────────────
   const [lessons, setLessons] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
-  const [openId, setOpenId] = useState(null); // which card is expanded
+  // which card is expanded — a citation link can ask for a specific lesson
+  const location = useLocation();
+  const [openId, setOpenId] = useState(() => location.state?.openNoteId ?? null);
 
   // ── load all existing lessons on mount ─────────────────────────────────────
   useEffect(() => {
@@ -310,6 +324,7 @@ export default function Lesson() {
                   key={lesson.note_id}
                   lesson={lesson}
                   isOpen={openId === lesson.note_id}
+                  highlight={location.state?.openNoteId === lesson.note_id}
                   onToggle={() =>
                     setOpenId((prev) =>
                       prev === lesson.note_id ? null : lesson.note_id

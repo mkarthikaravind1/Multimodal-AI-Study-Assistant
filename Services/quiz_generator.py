@@ -46,18 +46,30 @@ def _validate_questions(raw_questions) -> list[dict]:
     return valid
 
 
-def generate_quiz(content: str, topic: str) -> list[dict]:
+def generate_quiz(content: str, topic: str, focus: list[str] | None = None) -> list[dict]:
     """
     Takes note content, returns a list of validated MCQ dicts (up to 5).
+    focus: questions the student previously got wrong — the new quiz re-tests
+           the same concepts with DIFFERENT questions (self-healing loop).
     Raises QuizGenerationError if the model output is unusable.
     """
+    focus_text = ""
+    if focus:
+        listed = "\n".join(f"    - {q}" for q in focus)
+        focus_text = f"""
+    The student previously got these questions wrong:
+{listed}
+    Test the SAME underlying concepts again, but write NEW questions
+    (different wording, different examples). Do not reuse the questions above.
+"""
+
     prompt = f"""
     You are a quiz generator. Based on the following study notes, generate exactly 5
     multiple choice questions about "{topic}".
 
     Study Notes:
     {content}
-
+    {focus_text}
     Rules:
     - Each question must have exactly 4 different options
     - Only one option is correct

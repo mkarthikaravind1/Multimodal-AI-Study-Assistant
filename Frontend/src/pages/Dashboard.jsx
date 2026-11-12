@@ -166,13 +166,13 @@ export default function Dashboard() {
           <StatCard
             label="Strong topics"
             value={loading ? "—" : strongCount}
-            sub="≥ 70% average score"
+            sub="≥ 70% recent average"
             accent="#16A34A"
           />
           <StatCard
             label="Needs work"
             value={loading ? "—" : weakCount}
-            sub="< 70% average score"
+            sub="< 70% recent average"
             accent="#DC2626"
           />
         </div>
@@ -274,7 +274,7 @@ export default function Dashboard() {
         )}
 
         {/* ── quick actions ── */}
-        <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             {
               label: "New lesson",
@@ -293,6 +293,12 @@ export default function Dashboard() {
               desc: "Chat about anything you're stuck on",
               icon: "💬",
               path: "/tutor",
+            },
+            {
+              label: "Viva practice",
+              desc: "Answer out loud, get graded",
+              icon: "🎙️",
+              path: "/viva",
             },
           ].map(({ label, desc, icon, path }) => (
             <button

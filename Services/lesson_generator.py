@@ -61,3 +61,46 @@ def generate_notes(topic: str, student_class: str, easy_mode: bool = False) -> s
     )
 
     return response.choices[0].message.content or ""
+
+
+def generate_remediation_notes(topic: str, student_class: str, mistakes: list[dict]) -> str:
+    """
+    Self-healing loop: notes aimed at exactly what the student got wrong.
+    mistakes: [{"question", "user_answer", "correct_answer"}] — user_answer may be
+    None for quizzes taken before answers were recorded.
+    """
+    lines = []
+    for i, m in enumerate(mistakes, start=1):
+        line = f'{i}. Question: "{m["question"]}"\n   Correct answer: "{m["correct_answer"]}"'
+        if m.get("user_answer"):
+            line += f'\n   Student answered: "{m["user_answer"]}"'
+        lines.append(line)
+    mistakes_text = "\n".join(lines)
+
+    prompt = f"""
+    A {student_class} student is studying "{topic}" and got these quiz questions wrong:
+
+    {mistakes_text}
+
+    Write short, focused "fix-up" study notes that repair exactly these gaps:
+    - For each mistake, explain the underlying concept in simple language
+    - Where the student's answer is shown, explain why it is wrong (the likely misconception)
+    - Use one real-world analogy or tiny worked example per concept
+    - Do NOT repeat the quiz questions word for word
+
+    Format your response as:
+    1. What went wrong (1-2 sentences, encouraging tone)
+    2. Concepts to fix (one short section per concept, with a heading)
+    3. Quick memory tips (bullet points)
+    """
+
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[
+            {"role": "system", "content": "You are a patient tutor who repairs specific misunderstandings."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.6,
+        max_tokens=1024,
+    )
+    return response.choices[0].message.content or ""

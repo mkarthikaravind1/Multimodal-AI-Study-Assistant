@@ -21,6 +21,7 @@ export default function Navbar() {
         <Link to="/quiz" className="hover:text-blue-200">Quiz</Link>
         <Link to="/analytics" className="hover:text-blue-200">Analytics</Link>
         <Link to="/tutor" className="hover:text-blue-200">Tutor</Link>
+        <Link to="/viva" className="hover:text-blue-200">Viva</Link>
       </div>
       <div className="flex items-center gap-4 text-sm">
         <span className="text-blue-200">Hi, {user.username}</span>

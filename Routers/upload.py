@@ -3,7 +3,11 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 import io
 import os
+import shutil
+import mimetypes
 import tempfile
+from pathlib import Path
+from fastapi.responses import FileResponse
 import numpy as np
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
@@ -17,7 +21,10 @@ from schemas import (
     VideoAnalysisResponse, MaterialResponse,
 )
 from auth import get_current_user
-from Services.embedding_service import chunk_text, add_pdf_chunks_to_vectorstore, delete_material_vectors
+from Services.embedding_service import (
+    chunk_text, chunk_timed_segments, add_pdf_chunks_to_vectorstore, delete_material_vectors,
+)
+from Services.citations import format_timestamp
 from Services.vision_service import analyze_image
 from Services.audio_service import transcribe_audio
 from Services.video_service import analyze_video
@@ -30,6 +37,10 @@ MAX_PDF_BYTES   = 20 * MB
 MAX_IMAGE_BYTES = 4 * MB     # Groq vision rejects base64 images much larger than this
 MAX_AUDIO_BYTES = 25 * MB    # Groq Whisper upload limit
 MAX_VIDEO_BYTES = 200 * MB
+
+# Original files are kept here so citations can open them (PDF page, video timestamp).
+# Git-ignored. Layout: uploads/<user_id>/<material_id><ext>
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
 
 # ── EasyOCR is heavy (model download + ~1-2 s load), and only needed for
 #    scanned PDFs, so it's loaded on first use instead of at server startup.
@@ -60,12 +71,22 @@ def read_upload(file: UploadFile, max_bytes: int, label: str) -> bytes:
 
 
 def save_material_and_index(
-    db: Session, user_id: int, filename: str, file_type: str, chunks: list[str]
+    db: Session,
+    user_id: int,
+    filename: str,
+    file_type: str,
+    chunks: list[str],
+    chunk_meta: list[dict] | None = None,
+    file_bytes: bytes | None = None,
+    source_path: str | None = None,
 ) -> UploadedMaterial:
     """
-    Saves the MySQL row and the ChromaDB vectors together.
-    The row is only committed once the vectors are stored; if either step
-    fails, both are rolled back so MySQL and ChromaDB never disagree.
+    Saves the MySQL row, the ChromaDB vectors and (optionally) the original
+    file together. The row is only committed once everything else succeeded;
+    if any step fails, all of it is rolled back so the stores never disagree.
+
+    chunk_meta : per-chunk citation info, e.g. {"page": 3} or {"start_sec": 75.0}
+    file_bytes / source_path : the original upload, kept for clickable citations
     """
     material = UploadedMaterial(
         user_id=user_id,
@@ -78,14 +99,27 @@ def save_material_and_index(
     db.flush()      # assigns material_id without committing
 
     material_id = cast(int, material.material_id)
+    stored_file: Path | None = None
     try:
         add_pdf_chunks_to_vectorstore(
             material_id=material_id,
             chunks=chunks,
             user_id=user_id,
             filename=filename,
-            source=file_type
+            source=file_type,
+            chunk_meta=chunk_meta,
         )
+
+        if file_bytes is not None or source_path is not None:
+            ext = os.path.splitext(filename)[1].lower() or ""
+            stored_file = UPLOAD_DIR / str(user_id) / f"{material_id}{ext}"
+            stored_file.parent.mkdir(parents=True, exist_ok=True)
+            if file_bytes is not None:
+                stored_file.write_bytes(file_bytes)
+            else:
+                shutil.copyfile(cast(str, source_path), stored_file)
+            material.stored_path = str(stored_file.relative_to(UPLOAD_DIR))   # type: ignore
+
         db.commit()
     except Exception:
         db.rollback()
@@ -93,6 +127,8 @@ def save_material_and_index(
             delete_material_vectors(material_id, file_type)
         except Exception:
             pass
+        if stored_file is not None and stored_file.exists():
+            stored_file.unlink()
         raise
 
     db.refresh(material)
@@ -109,19 +145,15 @@ def upload_pdf(file: UploadFile = File(...),db: Session = Depends(get_db),curren
     # Step 2 — Read file bytes (size-limited)
     file_bytes = read_upload(file, MAX_PDF_BYTES, "PDF")
 
-    # Step 3 — Extract text from PDF using PyPDF
+    # Step 3 — Extract text page by page (page numbers are kept for citations)
     try:
         pdf_reader = PdfReader(io.BytesIO(file_bytes))
-        full_text = ""
-        for page in pdf_reader.pages:
-            page_text = page.extract_text()
-            if page_text:                       # some pages might be empty/images
-                full_text += page_text + "\n"
+        page_texts = [page.extract_text() or "" for page in pdf_reader.pages]
     except PdfReadError:
         raise HTTPException(status_code=400, detail="This file is not a valid PDF or is corrupted.")
 
     # OCR fallback for scanned / image-only PDFs
-    if not full_text.strip():
+    if not "".join(page_texts).strip():
         try:
             images = convert_from_bytes(file_bytes)
         except PDFInfoNotInstalledError:
@@ -131,19 +163,29 @@ def upload_pdf(file: UploadFile = File(...),db: Session = Depends(get_db),curren
             )
 
         reader = get_ocr_reader()
-        for image in images:
-            result = cast(list[str], reader.readtext(np.array(image), detail=0))
-            full_text += " ".join(result) + "\n"
+        page_texts = [
+            " ".join(cast(list[str], reader.readtext(np.array(image), detail=0)))
+            for image in images
+        ]
 
-    if not full_text.strip():
+    if not "".join(page_texts).strip():
         raise HTTPException(
             status_code=400,
             detail="Could not extract any text from this PDF."
         )
 
-    # Step 4 — Chunk, save to MySQL + ChromaDB together
-    chunks = chunk_text(full_text)
-    material = save_material_and_index(db, cast(int, current_user.user_id), filename, "pdf", chunks)
+    # Step 4 — Chunk each page separately so every chunk knows its page number
+    chunks: list[str] = []
+    chunk_meta: list[dict] = []
+    for page_number, page_text in enumerate(page_texts, start=1):
+        for chunk in chunk_text(page_text):
+            chunks.append(chunk)
+            chunk_meta.append({"page": page_number})
+
+    material = save_material_and_index(
+        db, cast(int, current_user.user_id), filename, "pdf", chunks,
+        chunk_meta=chunk_meta, file_bytes=file_bytes,
+    )
 
     return PDFUploadResponse(
         material_id=material.material_id,   # type: ignore
@@ -184,7 +226,9 @@ def upload_image(
         f"Question asked: {question}\n"
         f"Visual analysis: {answer}"
     )
-    material = save_material_and_index(db, user_id, filename, "image", chunk_text(combined_text))
+    material = save_material_and_index(
+        db, user_id, filename, "image", chunk_text(combined_text), file_bytes=image_bytes
+    )
 
     # Step 3 — Add the exchange to the tutor conversation, so follow-up
     #          questions in chat ("explain that diagram more") have context
@@ -279,14 +323,31 @@ def upload_video(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        # Step 4 — Index the summary AND the full transcript for RAG.
-        #          The summary is good for overview questions; the transcript
-        #          keeps the specific details the summary leaves out.
-        chunks = chunk_text(result["combined_summary"])
-        if result["has_audio"]:
-            chunks += chunk_text(f"Transcript of {filename}: {result['transcript']}")
+        # Step 4 — Index for RAG, keeping timestamps for clickable citations:
+        #   • transcript chunks, each with the time its speech starts
+        #   • frame descriptions, each with the time of the frame
+        #   • the overall summary (no single timestamp)
+        chunks: list[str] = []
+        chunk_meta: list[dict] = []
+        for text, start in chunk_timed_segments(result["segments"]):
+            chunks.append(text)
+            chunk_meta.append({"start_sec": round(start, 1)})
+        for frame in result["timed_frames"]:
+            chunks.append(f"On screen at {format_timestamp(frame['start'])}: {frame['text']}")
+            chunk_meta.append({"start_sec": round(frame["start"], 1)})
+        if result["has_audio"] and not result["segments"]:
+            # Whisper returned text without segments — still index it, untimed
+            for text in chunk_text(result["transcript"]):
+                chunks.append(text)
+                chunk_meta.append({})
+        for text in chunk_text(result["combined_summary"]):
+            chunks.append(text)
+            chunk_meta.append({})
 
-        save_material_and_index(db, cast(int, current_user.user_id), filename, "video", chunks)
+        save_material_and_index(
+            db, cast(int, current_user.user_id), filename, "video", chunks,
+            chunk_meta=chunk_meta, source_path=temp_video_path,
+        )
 
         return VideoAnalysisResponse(
             filename=filename,
@@ -336,6 +397,36 @@ def delete_material(material_id: int, db: Session = Depends(get_db), current_use
         raise HTTPException(status_code=404, detail="Material not found")
 
     delete_material_vectors(material_id, cast(str, material.file_type))
+    if material.stored_path:
+        stored = UPLOAD_DIR / str(material.stored_path)
+        if stored.exists():
+            stored.unlink()
     db.delete(material)
     db.commit()
     return {"message": f"Deleted {material.filename}"}
+
+
+@router.get("/materials/{material_id}/file")
+def get_material_file(material_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """
+    Streams the original uploaded file — only to its owner.
+    Used by clickable citations (PDF opened at a page, video at a timestamp).
+    """
+    material = db.query(UploadedMaterial).filter(
+        UploadedMaterial.material_id == material_id,
+        UploadedMaterial.user_id == current_user.user_id
+    ).first()
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+    if not material.stored_path:
+        raise HTTPException(
+            status_code=404,
+            detail="The original file isn't stored (it was uploaded before citations were added)."
+        )
+
+    path = (UPLOAD_DIR / str(material.stored_path)).resolve()
+    if UPLOAD_DIR.resolve() not in path.parents or not path.exists():
+        raise HTTPException(status_code=404, detail="File not found on the server")
+
+    media_type = mimetypes.guess_type(str(material.filename))[0] or "application/octet-stream"
+    return FileResponse(path, media_type=media_type)

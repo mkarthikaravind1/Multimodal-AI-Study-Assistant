@@ -7,6 +7,7 @@ from models import Note, QuizDetail, User
 from schemas import MCQQuestionPublic, QuizRequest, QuizResponse, QuizSubmitRequest, QuestionResult, QuizSubmitResponse
 from Services.quiz_generator import generate_quiz, QuizGenerationError
 from auth import get_current_user
+from Services.learning_loop import PASS_MARK, loop_round
 
 router = APIRouter(prefix="/quiz", tags=["Quiz"])
 
@@ -108,6 +109,7 @@ def submit_quiz(request: QuizSubmitRequest, db: Session = Depends(get_db), curre
     quiz.incorrect_answers = incorrect_count    # type: ignore
     quiz.score_percentage = score               # type: ignore
     quiz.submitted_at = utcnow()       # type: ignore
+    quiz.user_answers = submitted      # type: ignore  — needed to find mistakes for the learning loop
     db.commit()
     db.refresh(quiz)
 
@@ -119,5 +121,7 @@ def submit_quiz(request: QuizSubmitRequest, db: Session = Depends(get_db), curre
         incorrect_answers=incorrect_count,
         score_percentage=score,
         results=results,
+        loop_round=loop_round(db, quiz),
+        passed=score >= PASS_MARK,
         message=f"Quiz submitted. You scored {score}%"
     )

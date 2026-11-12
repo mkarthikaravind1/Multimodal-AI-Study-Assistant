@@ -12,6 +12,8 @@ from Routers.tutor import router as tutor_router
 from Routers.upload import router as upload_router
 from fastapi.middleware.cors import CORSMiddleware
 from Routers.admin import router as admin_router
+from Routers.learning import router as learning_router
+from Routers.viva import router as viva_router
 
 load_dotenv()
 
@@ -62,3 +64,5 @@ app.include_router(analytics_router)
 app.include_router(tutor_router)
 app.include_router(upload_router)
 app.include_router(admin_router)
+app.include_router(learning_router)
+app.include_router(viva_router)

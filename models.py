@@ -55,6 +55,9 @@ class QuizDetail(Base):
     score_percentage = Column(DECIMAL(5, 2), nullable=False)
     attempted_at = Column(DateTime, default=utcnow)
     submitted_at = Column(DateTime, nullable=True)   # NULL = generated but not submitted yet
+    user_answers = Column(JSON, nullable=True)       # {question: answer} saved on submit
+    # Self-healing loop: a retest quiz points at the quiz it is fixing
+    parent_quiz_id = Column(Integer, ForeignKey("quiz_details.quiz_id"), nullable=True)
     user_id = Column(Integer, ForeignKey("user_details.user_id"), nullable=False)
     note_id = Column(Integer, ForeignKey("notes.note_id"), nullable=False)
 
@@ -83,5 +86,22 @@ class UploadedMaterial(Base):
     file_type    = Column(String(50), nullable=False)
     total_chunks = Column(Integer, nullable=False)
     uploaded_at  = Column(DateTime, default=utcnow)
+    stored_path  = Column(String(500), nullable=True)   # original file in uploads/ (for citations)
 
     user = relationship("User", back_populates="materials")
+
+
+class VivaSession(Base):
+    """An oral exam: AI asks open questions about a lesson, grades spoken/typed answers."""
+    __tablename__ = "viva_sessions"
+
+    viva_id      = Column(Integer, primary_key=True, index=True)
+    user_id      = Column(Integer, ForeignKey("user_details.user_id"), nullable=False)
+    note_id      = Column(Integer, ForeignKey("notes.note_id"), nullable=False)
+    topic        = Column(String(255), nullable=False)
+    # [{question, key_points, answer, score, feedback, ideal_answer, missed_points}]
+    questions    = Column(JSON, nullable=False)
+    total_score  = Column(Integer, nullable=True)    # sum of 0-10 scores, set when finished
+    max_score    = Column(Integer, nullable=False)
+    started_at   = Column(DateTime, default=utcnow)
+    completed_at = Column(DateTime, nullable=True)

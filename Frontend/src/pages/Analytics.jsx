@@ -21,11 +21,59 @@ function ScoreBar({ score }) {
   );
 }
 
-function TopicRow({ topic, score, isStrong, onRegenerate, regenerating }) {
+const STATUS = {
+  mastered:    { label: "Mastered",     bg: "#DCFCE7", fg: "#15803D" },
+  recovered:   { label: "Recovered ✓",  bg: "#DBEAFE", fg: "#1D4ED8" },
+  in_recovery: { label: "In recovery",  bg: "#FFEDD5", fg: "#C2410C" },
+  needs_work:  { label: "Needs work",   bg: "#FEE2E2", fg: "#B91C1C" },
+};
+
+// Score history for one topic: each dot is a submitted quiz, dashed line = 70% pass mark.
+// Orange-ringed dots are self-healing retests.
+function Sparkline({ attempts }) {
+  const W = 132, H = 34, PAD = 4;
+  const n = attempts.length;
+  const x = (i) => (n === 1 ? W / 2 : PAD + (i * (W - 2 * PAD)) / (n - 1));
+  const y = (score) => H - PAD - (score / 100) * (H - 2 * PAD);
+  const points = attempts.map((a, i) => `${x(i)},${y(a.score)}`).join(" ");
+
+  return (
+    <svg
+      width={W}
+      height={H}
+      viewBox={`0 0 ${W} ${H}`}
+      className="flex-shrink-0"
+      role="img"
+      aria-label={`Score history: ${attempts.map((a) => `${a.score}%`).join(", ")}`}
+    >
+      <line x1={PAD} x2={W - PAD} y1={y(70)} y2={y(70)} stroke="#D1D5DB" strokeDasharray="3 3" strokeWidth="1" />
+      {n > 1 && <polyline points={points} fill="none" stroke="#6366F1" strokeWidth="1.5" strokeLinejoin="round" />}
+      {attempts.map((a, i) => (
+        <circle
+          key={a.quiz_id}
+          cx={x(i)}
+          cy={y(a.score)}
+          r={a.loop_round > 1 ? 3.5 : 2.5}
+          fill={a.score >= 70 ? "#16A34A" : "#DC2626"}
+          stroke={a.loop_round > 1 ? "#F97316" : "none"}
+          strokeWidth="1.5"
+        >
+          <title>
+            {`${a.score}%${a.loop_round > 1 ? ` · retest round ${a.loop_round}` : ""}`}
+          </title>
+        </circle>
+      ))}
+    </svg>
+  );
+}
+
+function TopicRow({ topic, score, isStrong, progress, onLoop, onRegenerate, regenerating }) {
+  const status = progress ? STATUS[progress.status] : null;
+  const canLoop = progress && progress.latest_score < 70;
   return (
     <div className="flex items-center gap-4 py-3 border-b border-gray-50 last:border-0">
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1.5">
+        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
           <span
             className="w-2 h-2 rounded-full flex-shrink-0"
             style={{ background: isStrong ? "#16A34A" : "#DC2626" }}
@@ -40,9 +88,35 @@ function TopicRow({ topic, score, isStrong, onRegenerate, regenerating }) {
           >
             {isStrong ? "Strong" : "Weak"}
           </span>
+          {status && (
+            <span
+              className="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0"
+              style={{ background: status.bg, color: status.fg }}
+            >
+              {status.label}
+            </span>
+          )}
+          {progress && (
+            <span className="text-xs text-gray-400">
+              {progress.attempts.length} attempt{progress.attempts.length === 1 ? "" : "s"}
+            </span>
+          )}
         </div>
         <ScoreBar score={score} />
       </div>
+
+      {progress && <Sparkline attempts={progress.attempts} />}
+
+      {canLoop && (
+        <button
+          onClick={() => onLoop(progress.latest_quiz_id)}
+          title="Fix-up notes for what you got wrong, then a fresh retest"
+          className="flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-medium text-white hover:opacity-90"
+          style={{ background: "#4F46E5" }}
+        >
+          🔁 {progress.status === "in_recovery" ? "Continue loop" : "Start fix-up loop"}
+        </button>
+      )}
 
       {!isStrong && (
         <button
@@ -79,6 +153,7 @@ export default function Analytics() {
   const [regenSuccess, setRegenSuccess] = useState(null);
   const [regenError, setRegenError] = useState("");
   const [classFor, setClassFor] = useState(""); // class picker for regen
+  const [progress, setProgress] = useState({});  // lower-cased topic -> loop progress
 
   useEffect(() => {
     async function load() {
@@ -93,6 +168,14 @@ export default function Analytics() {
         setLoading(false);
       }
     }
+    async function loadProgress() {
+      try {
+        const res = await api.get("/learning/progress");
+        setProgress(Object.fromEntries(res.data.map((p) => [p.topic.toLowerCase(), p])));
+      } catch {
+        // the page still works without history
+      }
+    }
     async function prefillClass() {
       try {
         const res = await api.get("/me");
@@ -102,6 +185,7 @@ export default function Analytics() {
       }
     }
     load();
+    loadProgress();
     prefillClass();
   }, []);
 
@@ -156,7 +240,7 @@ export default function Analytics() {
           </p>
           <h1 className="text-3xl font-bold text-gray-900">Analytics</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Your average quiz scores by topic — see what to review next.
+            Your recent quiz scores by topic, and how each one is recovering.
           </p>
         </div>
 
@@ -274,6 +358,8 @@ export default function Analytics() {
                 topic={topic}
                 score={average_score}
                 isStrong={strongSet.has(topic)}
+                progress={progress[topic.toLowerCase()]}
+                onLoop={(quizId) => navigate("/quiz", { state: { remediateQuizId: quizId } })}
                 onRegenerate={handleRegenerate}
                 regenerating={regenerating}
               />
@@ -284,7 +370,7 @@ export default function Analytics() {
         {/* ── threshold note ── */}
         {!loading && sorted.length > 0 && (
           <p className="text-xs text-gray-400 text-center mt-4">
-            Topics with ≥ 70% average are marked strong. Below 70% → weak.
+            Strong = average of your last 3 attempts is ≥ 70%. 🔁 Fix-up loop: targeted notes + a retest until you pass.
           </p>
         )}
       </div>

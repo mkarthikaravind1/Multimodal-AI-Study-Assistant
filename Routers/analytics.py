@@ -1,48 +1,35 @@
+from typing import cast
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from database import get_db
-from models import QuizDetail, User
+from models import User
 from schemas import AnalyticsResponse, TopicAverage
 from auth import get_current_user
+from Services.learning_loop import PASS_MARK, recent_average, submitted_quizzes_by_topic
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
-STRONG_THRESHOLD = 70.0   # >= 70% average = strong topic
+STRONG_THRESHOLD = PASS_MARK   # >= 70% recent average = strong topic
 
 @router.get("", response_model=AnalyticsResponse)
 def get_analytics(db: Session = Depends(get_db),  current_user: User = Depends(get_current_user)):
-
-    # Step 1 & 2 — Group by topic (case-insensitive, so "Graphs" and "graphs"
-    # are one topic) and calculate the average score of SUBMITTED quizzes only
-    topic_key = func.lower(QuizDetail.topic)
-    results = db.query(
-        func.min(QuizDetail.topic),             # a display name for the group
-        func.avg(QuizDetail.score_percentage)
-    ).filter(
-        QuizDetail.user_id == current_user.user_id,
-        QuizDetail.submitted_at.isnot(None)     # ignore generated-but-unsubmitted quizzes
-    ).group_by(
-        topic_key
-    ).all()
-
-    # Step 3 — Split into strong/weak based on threshold
+    """
+    Strong / weak topics based on the average of each topic's LAST 3 submitted
+    quizzes (case-insensitive topic grouping). Using recent attempts — not the
+    all-time average — lets a topic turn strong once the student recovers.
+    """
     strong = []
     weak = []
     breakdown = []
 
-    for topic, avg_score in results:
-        avg_score = round(float(avg_score), 2)   # Decimal → float, round to 2 places
+    for quizzes in submitted_quizzes_by_topic(db, cast(int, current_user.user_id)).values():
+        topic = cast(str, quizzes[-1].topic)                       # latest spelling of the topic
+        avg_score = recent_average([float(q.score_percentage) for q in quizzes])   # type: ignore
 
         breakdown.append(TopicAverage(topic=topic, average_score=avg_score))
+        (strong if avg_score >= STRONG_THRESHOLD else weak).append(topic)
 
-        if avg_score >= STRONG_THRESHOLD:
-            strong.append(topic)
-        else:
-            weak.append(topic)
-
-    # Step 4 — Return response
     return AnalyticsResponse(
         strong=strong,
         weak=weak,

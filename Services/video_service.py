@@ -5,7 +5,8 @@ import cv2                          # opencv for frame extraction
 from moviepy import VideoFileClip
 from groq import Groq
 from dotenv import load_dotenv
-from Services.audio_service import transcribe_audio
+from Services.audio_service import transcribe_with_segments
+from Services.citations import format_timestamp
 
 load_dotenv()
 
@@ -43,10 +44,10 @@ def extract_audio_from_video(video_path: str) -> bytes | None:
         video.close()
 
 
-def extract_key_frames(video_path: str) -> list[bytes]:
+def extract_key_frames(video_path: str) -> list[tuple[float, bytes]]:
     """
     Extracts up to MAX_FRAMES evenly spaced frames from the video.
-    Returns list of JPEG image bytes.
+    Returns list of (timestamp_in_seconds, JPEG bytes).
     """
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)                    # frames per second
@@ -73,7 +74,7 @@ def extract_key_frames(video_path: str) -> list[bytes]:
         # Encode frame as JPEG bytes
         success, buffer = cv2.imencode(".jpg", frame)
         if success:
-            frame_bytes_list.append(buffer.tobytes())
+            frame_bytes_list.append((current_second, buffer.tobytes()))
 
         current_second += interval
 
@@ -125,7 +126,7 @@ def analyze_video(video_path: str, filename: str) -> dict:
     1. Extract + transcribe audio
     2. Extract + describe key frames
     3. Combine into a structured analysis
-    Returns dict with transcript, frame_descriptions, combined_summary
+    Returns dict with transcript, timed segments, timed frames and combined_summary
     """
     
     # Step 1 — Extract and transcribe audio
@@ -135,10 +136,10 @@ def analyze_video(video_path: str, filename: str) -> dict:
         # The bytes are always mp3, so the name must end in .mp3 whatever the
         # original extension was (.mov, .webm, .MP4 …) — Whisper uses it to detect format.
         audio_filename = os.path.splitext(filename)[0] + ".mp3"
-        transcript = transcribe_audio(audio_bytes, audio_filename)
+        transcript, segments = transcribe_with_segments(audio_bytes, audio_filename)
     else:
         print(f"[Video] {filename} has no audio track — using frames only.")
-        transcript = "(This video has no audio track.)"
+        transcript, segments = "(This video has no audio track.)", []
 
     # Step 2 — Extract key frames
     print(f"[Video] Extracting key frames...")
@@ -147,10 +148,12 @@ def analyze_video(video_path: str, filename: str) -> dict:
 
     # Step 3 — Describe each frame
     frame_descriptions = []
-    for i, frame_bytes in enumerate(frames):
+    timed_frames = []          # [{"start": seconds, "text": description}] for citations
+    for i, (second, frame_bytes) in enumerate(frames):
         print(f"[Video] Describing frame {i + 1}/{len(frames)}...")
         description = describe_frame(frame_bytes, i + 1)
-        frame_descriptions.append(f"Frame {i + 1}: {description}")
+        frame_descriptions.append(f"Frame at {format_timestamp(second)}: {description}")
+        timed_frames.append({"start": second, "text": description})
 
     # Step 4 — Combine transcript + frame descriptions into one summary
     combined_text = f"""
@@ -186,6 +189,8 @@ KEY FRAME DESCRIPTIONS:
     return {
         "has_audio": bool(audio_bytes),
         "transcript": transcript,
+        "segments": segments,
         "frame_descriptions": frame_descriptions,
+        "timed_frames": timed_frames,
         "combined_summary": combined_summary
     }

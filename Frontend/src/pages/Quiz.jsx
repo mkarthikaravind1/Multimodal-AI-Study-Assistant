@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../api/axios";
+import MarkdownContent from "../components/MarkdownContent";
 import Spinner from "../components/Spinner";
 import usePageTitle from "../hooks/usePageTitle";
 
@@ -221,7 +223,79 @@ function QuizPhase({ quiz, onSubmit, submitting }) {
 }
 
 // ── PHASE 3: Results ──────────────────────────────────────────────────────────
-function ResultsPhase({ result, onRetry }) {
+// Shown under the score: start the loop (failed) or celebrate recovery (passed a retest)
+function LoopCard({ result, onRemediate, remediating, loopError }) {
+  const { passed, loop_round, incorrect_answers, topic, quiz_id } = result;
+
+  if (passed && loop_round > 1) {
+    return (
+      <div className="rounded-2xl p-5 border" style={{ background: "#F0FDF4", borderColor: "#BBF7D0" }}>
+        <p className="text-sm font-semibold text-green-800">🎉 Recovered!</p>
+        <p className="text-xs text-green-700 mt-1">
+          You passed <strong>{topic}</strong> after {loop_round - 1} fix-up round
+          {loop_round - 1 > 1 ? "s" : ""}. The loop worked — this topic now counts toward your strong topics.
+        </p>
+      </div>
+    );
+  }
+  if (passed) return null;
+
+  return (
+    <div className="rounded-2xl p-5 border" style={{ background: "#FFF7ED", borderColor: "#FED7AA" }}>
+      <p className="text-sm font-semibold text-orange-800">
+        🔁 Self-healing loop{loop_round > 1 ? ` · round ${loop_round} done` : ""}
+      </p>
+      <p className="text-xs text-orange-700 mt-1">
+        You missed {incorrect_answers} question{incorrect_answers === 1 ? "" : "s"}. Get short fix-up notes that
+        target exactly those concepts, then a fresh retest with new questions.
+      </p>
+      {loopError && <p className="text-xs text-red-600 mt-2">{loopError}</p>}
+      <button
+        onClick={() => onRemediate(quiz_id)}
+        disabled={remediating}
+        className="mt-3 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white
+                   hover:opacity-90 disabled:opacity-60"
+        style={{ background: "#EA580C" }}
+      >
+        {remediating ? <><Spinner /> Preparing fix-up notes…</> : "Fix my mistakes"}
+      </button>
+    </div>
+  );
+}
+
+// Fix-up notes for the questions the student missed, then the retest
+function RemediationPhase({ remediation, onStart }) {
+  const { loop_round, missed_count, note, quiz } = remediation;
+  return (
+    <div className="max-w-2xl mx-auto flex flex-col gap-5">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="w-10 h-10 rounded-xl flex items-center justify-center text-xl" style={{ background: "#FFF7ED" }}>
+            🔁
+          </span>
+          <div>
+            <h2 className="text-base font-semibold text-gray-800">Round {loop_round} · {note.title}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Targets the {missed_count} question{missed_count === 1 ? "" : "s"} you missed · saved to Lessons
+            </p>
+          </div>
+        </div>
+        <div className="text-sm text-gray-700 leading-relaxed">
+          <MarkdownContent content={note.content} />
+        </div>
+      </div>
+      <button
+        onClick={onStart}
+        className="w-full py-3 rounded-xl text-sm font-medium text-white hover:opacity-90"
+        style={{ background: "#4F46E5" }}
+      >
+        I've read it — start the retest ({quiz.total_questions} new questions)
+      </button>
+    </div>
+  );
+}
+
+function ResultsPhase({ result, onRetry, onRemediate, remediating, loopError }) {
   const { topic, total_questions, correct_answers, incorrect_answers, score_percentage, results } = result;
 
   const scoreColor =
@@ -259,6 +333,8 @@ function ResultsPhase({ result, onRetry }) {
           </div>
         </div>
       </div>
+
+      <LoopCard result={result} onRemediate={onRemediate} remediating={remediating} loopError={loopError} />
 
       {/* per-question breakdown */}
       <div className="flex flex-col gap-3">
@@ -316,11 +392,48 @@ function ResultsPhase({ result, onRetry }) {
 // ── main component ────────────────────────────────────────────────────────────
 export default function Quiz() {
   usePageTitle("Quiz");
-  const [phase, setPhase] = useState("setup"); // "setup" | "quiz" | "results"
+  const location = useLocation();
+  const navigate = useNavigate();
+  // Analytics can send us here to continue the loop for a weak topic
+  const startLoopFor = location.state?.remediateQuizId ?? null;
+
+  const [phase, setPhase] = useState("setup"); // "setup" | "fixup" | "quiz" | "results"
   const [quiz, setQuiz] = useState(null);
   const [result, setResult] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+
+  // self-healing loop
+  const [remediation, setRemediation] = useState(null);
+  const [remediating, setRemediating] = useState(Boolean(startLoopFor));
+  const [loopError, setLoopError] = useState("");
+  const loopRequested = useRef(false);   // StrictMode runs effects twice — only call once
+
+  function requestRemediation(quizId) {
+    return api
+      .post("/learning/remediate", { quiz_id: quizId })
+      .then((res) => {
+        setRemediation(res.data);
+        setPhase("fixup");
+      })
+      .catch((err) => setLoopError(getErrorMessage(err, "Could not prepare fix-up notes. Try again.")))
+      .finally(() => setRemediating(false));
+  }
+
+  function handleRemediate(quizId) {
+    setRemediating(true);
+    setLoopError("");
+    requestRemediation(quizId);
+  }
+
+  useEffect(() => {
+    if (!startLoopFor || loopRequested.current) return;
+    loopRequested.current = true;
+    requestRemediation(startLoopFor).then(() =>
+      navigate("/quiz", { replace: true, state: null })   // don't restart the loop on refresh
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startLoopFor]);
 
   async function handleSubmit(answers) {
     setSubmitting(true);
@@ -356,11 +469,11 @@ export default function Quiz() {
 
         {/* ── step indicator ── */}
         <div className="flex items-center gap-2 mb-8">
-          {["Setup", "Questions", "Results"].map((label, idx) => {
-            const stepPhase = ["setup", "quiz", "results"][idx];
+          {[remediation ? "Fix-up notes" : "Setup", "Questions", "Results"].map((label, idx) => {
+            const stepPhase = [remediation ? "fixup" : "setup", "quiz", "results"][idx];
             const active = phase === stepPhase;
             const done =
-              (idx === 0 && phase !== "setup") ||
+              (idx === 0 && phase !== "setup" && phase !== "fixup") ||
               (idx === 1 && phase === "results");
             return (
               <div key={label} className="flex items-center gap-2">
@@ -394,7 +507,29 @@ export default function Quiz() {
         )}
 
         {/* ── phase render ── */}
-        {phase === "setup" && (
+        {phase === "setup" && remediating && (
+          <div className="max-w-lg mx-auto bg-white rounded-2xl border border-gray-100 shadow-sm p-8 flex flex-col items-center gap-3 text-center">
+            <Spinner size={5} color="text-orange-500" />
+            <p className="text-sm font-medium text-gray-700">Preparing your fix-up notes and retest…</p>
+            <p className="text-xs text-gray-400">This takes about 10–20 seconds.</p>
+          </div>
+        )}
+        {phase === "setup" && !remediating && loopError && startLoopFor && (
+          <div className="mb-6 max-w-lg mx-auto px-4 py-3 rounded-xl bg-red-50 text-red-600 text-sm border border-red-100">
+            {loopError}
+          </div>
+        )}
+        {phase === "fixup" && remediation && (
+          <RemediationPhase
+            remediation={remediation}
+            onStart={() => {
+              setQuiz(remediation.quiz);
+              setResult(null);
+              setPhase("quiz");
+            }}
+          />
+        )}
+        {phase === "setup" && !remediating && (
           <SetupPhase
             onQuizGenerated={(data) => {
               setQuiz(data);
@@ -412,9 +547,14 @@ export default function Quiz() {
         {phase === "results" && result && (
           <ResultsPhase
             result={result}
+            onRemediate={handleRemediate}
+            remediating={remediating}
+            loopError={loopError}
             onRetry={() => {
               setQuiz(null);
               setResult(null);
+              setRemediation(null);
+              setLoopError("");
               setPhase("setup");
             }}
           />

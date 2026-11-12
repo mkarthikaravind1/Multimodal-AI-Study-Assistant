@@ -1,6 +1,20 @@
 import ReactMarkdown from "react-markdown";
 
-export default function MarkdownContent({ content }) {
+const CITE_PREFIX = "#cite-";
+
+// "[S1]" in the text → a markdown link "[S1](#cite-S1)" that renders as a chip.
+// Only tags that have a matching source are converted.
+function linkCitations(content, sources) {
+  if (!sources?.length) return content;
+  const ids = new Set(sources.map((s) => s.id));
+  return content.replace(/\[(S\d+)\](?!\()/g, (match, id) =>
+    ids.has(id) ? `[${id}](${CITE_PREFIX}${id})` : match
+  );
+}
+
+export default function MarkdownContent({ content, sources, onCite }) {
+  const byId = Object.fromEntries((sources ?? []).map((s) => [s.id, s]));
+
   return (
     <ReactMarkdown
       components={{
@@ -28,9 +42,31 @@ export default function MarkdownContent({ content }) {
         p: ({ children }) => (
           <p className="text-sm leading-relaxed text-gray-700 mb-2">{children}</p>
         ),
+        a: ({ href, children }) => {
+          if (href?.startsWith(CITE_PREFIX)) {
+            const source = byId[href.slice(CITE_PREFIX.length)];
+            return (
+              <button
+                type="button"
+                onClick={() => source && onCite?.(source)}
+                title={source?.label}
+                className="inline-flex items-center align-baseline mx-0.5 px-1.5 py-px rounded-md text-[11px]
+                           font-semibold bg-indigo-50 text-indigo-600 border border-indigo-100
+                           hover:bg-indigo-100 cursor-pointer"
+              >
+                {children}
+              </button>
+            );
+          }
+          return (
+            <a href={href} target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">
+              {children}
+            </a>
+          );
+        },
       }}
     >
-      {content}
+      {linkCitations(content, sources)}
     </ReactMarkdown>
   );
 }

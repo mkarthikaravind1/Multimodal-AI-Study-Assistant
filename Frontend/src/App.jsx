@@ -13,6 +13,7 @@ import Analytics from "./pages/Analytics";
 import Tutor     from "./pages/Tutor";
 import Admin     from "./pages/Admin";
 import NotFound  from "./pages/NotFound";
+import Viva      from "./pages/Viva";
 
 function DefaultRedirect() {
   const { user } = useAuth();
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/quiz"      element={<ProtectedRoute><Quiz /></ProtectedRoute>} />
         <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
         <Route path="/tutor"     element={<ProtectedRoute><Tutor /></ProtectedRoute>} />
+        <Route path="/viva"      element={<ProtectedRoute><Viva /></ProtectedRoute>} />
 
         {/* Admin only */}
         <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />

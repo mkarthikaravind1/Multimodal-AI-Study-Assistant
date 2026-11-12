@@ -80,13 +80,15 @@ def _query(query_embedding: list[float], where: dict, n_results: int) -> list[tu
     return list(zip(documents, metadatas))
 
 
-def retrieve_relevant_notes(query: str, user_id: int, n_results: int = 5, note_id: int | None = None) -> list[str]:
+def retrieve_sources(query: str, user_id: int, n_results: int = 5, note_id: int | None = None) -> list[dict]:
     """
-    Searches ChromaDB for notes semantically similar to the query.
-    Filters by user_id so users only see their own notes.
+    Searches ChromaDB for the chunks most relevant to the query.
+    Filters by user_id so users only see their own material.
     If note_id is given (a chat started from a specific lesson), up to 3 of
     THAT lesson's chunks come first, followed by the best of everything else.
-    Returns a list of relevant text chunks, tagged with their source.
+
+    Returns [{"text": chunk_text, "meta": chunk_metadata}, ...] — the metadata
+    (source type, filename, page, start time, ids) is what makes citations clickable.
     """
     count = notes_collection.count()
     if count == 0:
@@ -109,24 +111,31 @@ def retrieve_relevant_notes(query: str, user_id: int, n_results: int = 5, note_i
             hits.append((doc, meta))
             seen.add(doc)
 
-    documents = [doc for doc, _ in hits]
-    metadatas = [meta for _, meta in hits]
+    return [{"text": doc, "meta": dict(meta or {})} for doc, meta in hits]
 
-    tagged_chunks = []
-    for doc, meta in zip(documents, metadatas):
-        source = meta.get("source", "note")
-        filename = meta.get("filename", "")
-        if source == "video":
-            label = f"[From video: {filename}]"
-        elif source == "pdf":
-            label = f"[From PDF: {filename}]"
-        elif source == "image":
-            label = f"[From image: {filename}]"
-        else:
-            label = "[From notes]"
-        tagged_chunks.append(f"{label}\n{doc}")
 
-    return tagged_chunks
+def chunk_timed_segments(segments: list[dict], max_words: int = CHUNK_SIZE_WORDS) -> list[tuple[str, float]]:
+    """
+    Groups Whisper segments ([{start, end, text}]) into chunks of at most
+    max_words words, keeping the start time of each chunk.
+    Returns [(chunk_text, start_seconds), ...].
+    """
+    chunks: list[tuple[str, float]] = []
+    words: list[str] = []
+    chunk_start = 0.0
+    for seg in segments:
+        seg_words = seg["text"].split()
+        if not seg_words:
+            continue
+        if words and len(words) + len(seg_words) > max_words:
+            chunks.append((" ".join(words), chunk_start))
+            words = []
+        if not words:
+            chunk_start = float(seg["start"])
+        words.extend(seg_words)
+    if words:
+        chunks.append((" ".join(words), chunk_start))
+    return chunks
 
 
 def delete_note_vectors(note_id: int):
@@ -139,30 +148,44 @@ def delete_material_vectors(material_id: int, source: str):
     notes_collection.delete(where={"$and": [{"material_id": material_id}, {"source": source}]})
 
 
-def add_pdf_chunks_to_vectorstore(material_id: int, chunks: list[str], user_id: int, filename: str, source: str = "pdf") -> int:
+def add_pdf_chunks_to_vectorstore(
+    material_id: int,
+    chunks: list[str],
+    user_id: int,
+    filename: str,
+    source: str = "pdf",
+    chunk_meta: list[dict] | None = None,
+) -> int:
     """
     Embeds all chunks in one batch and stores them in ChromaDB.
     Used for PDF, image and video material. Returns number of chunks stored.
+    chunk_meta (optional, one dict per chunk) adds citation info such as
+    {"page": 3} for PDFs or {"start_sec": 125.0} for videos.
     """
     if not chunks:
         return 0
 
     embeddings = embedding_model.encode(chunks).tolist()
 
+    metadatas = []
+    for i in range(len(chunks)):
+        meta = {
+            "user_id": user_id,
+            "material_id": material_id,
+            "filename": filename,
+            "chunk_index": i,
+            "source": source,
+        }
+        if chunk_meta:
+            # ChromaDB metadata values can't be None
+            meta.update({k: v for k, v in chunk_meta[i].items() if v is not None})
+        metadatas.append(meta)
+
     notes_collection.upsert(
         ids=[f"{source}_{material_id}_chunk_{i}" for i in range(len(chunks))],
         embeddings=embeddings,
         documents=chunks,
-        metadatas=[
-            {
-                "user_id": user_id,
-                "material_id": material_id,
-                "filename": filename,
-                "chunk_index": i,
-                "source": source
-            }
-            for i in range(len(chunks))
-        ]
+        metadatas=metadatas,
     )
 
     return len(chunks)

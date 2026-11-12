@@ -86,7 +86,39 @@ class QuizSubmitResponse(BaseModel):
     incorrect_answers: int
     score_percentage: float
     results: list[QuestionResult]   # breakdown per question
+    loop_round: int = 1             # 1 = original quiz, 2+ = self-healing retest
+    passed: bool = False            # score >= 70
     message: str
+
+# ── Self-healing learning loop ────────────────────────────────────────────────
+class RemediateRequest(BaseModel):
+    quiz_id: int                     # the submitted quiz that scored below 70%
+
+class LessonLite(BaseModel):
+    note_id: int
+    title: str
+    content: str
+
+class RemediationResponse(BaseModel):
+    loop_round: int                  # round number of the NEW retest quiz
+    missed_count: int
+    note: LessonLite                 # targeted fix-up notes
+    quiz: QuizResponse               # retest on the same concepts
+    message: str
+
+class Attempt(BaseModel):
+    quiz_id: int
+    score: float
+    submitted_at: datetime | None
+    loop_round: int
+
+class TopicProgress(BaseModel):
+    topic: str
+    status: str                      # mastered | recovered | in_recovery | needs_work
+    recent_average: float            # average of the last 3 attempts (drives strong/weak)
+    latest_score: float
+    latest_quiz_id: int
+    attempts: list[Attempt]          # oldest → newest
 
 class TopicAverage(BaseModel):
     topic:str
@@ -97,9 +129,22 @@ class AnalyticsResponse(BaseModel):
     weak:list[str]
     topic_breakdown:list[TopicAverage]
 
+class Citation(BaseModel):
+    """A clickable source the tutor cited, e.g. [S1]."""
+    id: str                          # "S1", "S2", … — matches the tag in the reply text
+    type: str                        # note | pdf | image | video
+    label: str                       # "lecture.pdf · p. 4", "talk.mp4 · 03:42", "Notes on Graphs"
+    filename: str | None = None
+    material_id: int | None = None   # uploaded file → GET /upload/materials/{id}/file
+    note_id: int | None = None       # lesson → opens it on the Lessons page
+    page: int | None = None          # PDF page (1-based)
+    start_sec: float | None = None   # video position
+    timestamp: str | None = None     # "03:42"
+
 class ChatMessage(BaseModel):
     role: str       # "user" or "assistant"
     content: str
+    sources: list[Citation] = []     # only on assistant messages that cited something
 
 class ChatRequest(BaseModel):
     session_id: int | None = None    # None = start a new session
@@ -144,3 +189,49 @@ class VideoAnalysisResponse(BaseModel):
     combined_summary: str
     total_frames_analyzed: int
     message: str
+
+# ── Viva / oral exam ──────────────────────────────────────────────────────────
+class VivaStartRequest(BaseModel):
+    note_id: int
+    num_questions: int = Field(default=5, ge=3, le=8)
+
+class VivaAnswerRequest(BaseModel):
+    answer: str = Field(min_length=1, max_length=3000)
+
+class VivaGradedQuestion(BaseModel):
+    question: str
+    answer: str
+    score: int                       # 0-10
+    feedback: str
+    ideal_answer: str
+    missed_points: list[str]
+
+class VivaState(BaseModel):
+    """Full state of a viva — used to start, resume and review one."""
+    viva_id: int
+    note_id: int
+    topic: str
+    total_questions: int
+    graded: list[VivaGradedQuestion] # questions answered so far, in order
+    current_index: int | None        # index of the next question (None when finished)
+    current_question: str | None
+    finished: bool
+    total_score: int | None          # set when finished
+    max_score: int
+    started_at: datetime | None
+    completed_at: datetime | None
+
+class VivaAnswerResponse(BaseModel):
+    result: VivaGradedQuestion       # grading of the answer just given
+    question_index: int
+    state: VivaState                 # updated state (next question or finished)
+
+class VivaSummary(BaseModel):
+    viva_id: int
+    topic: str
+    answered: int
+    total_questions: int
+    total_score: int | None
+    max_score: int
+    finished: bool
+    started_at: datetime | None

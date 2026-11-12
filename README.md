@@ -20,6 +20,19 @@ An AI-powered learning platform that helps students learn better by generating q
 -  Admin Dashboard
 -  Lesson Management
 
+### ✨ Standout features
+
+- **Clickable source citations** — the AI Tutor cites where every fact came from, inline as `[S1]`, `[S2]`.
+  Clicking a citation opens the PDF **at the exact page**, plays the video **from the exact timestamp**
+  (Whisper segment timings), shows the image, or jumps to the lesson.
+- **Self-healing learning loop** — score below 70% and the app generates fix-up notes that target exactly
+  the questions you missed (including *why* your answer was wrong), then a fresh retest on the same concepts.
+  Repeat until you pass (max 5 rounds). Analytics shows each topic's score history and status:
+  *Needs work → In recovery → Recovered ✓*. Mastery uses your **last 3 attempts**, so recovery counts.
+- **Viva / oral-exam mode** — an AI examiner asks open-ended questions out loud (browser text-to-speech),
+  you answer by voice (Whisper) or text, and each answer is graded 0–10 with feedback, a model answer
+  and the key points you missed. Past vivas can be resumed or reviewed.
+
 ---
 
 ## 🛠 Tech Stack
@@ -265,7 +278,14 @@ The platform has two independent content pipelines that converge at a single ret
 | POST | `/quiz/generate` | Generate a quiz from a lesson |
 | POST | `/quiz/submit` | Submit answers and get scored results |
 | GET | `/analytics` | User's quiz analytics (weak/strong topics) |
-| POST | `/chat` | AI Tutor chat (RAG-based) |
+| POST | `/chat` | AI Tutor chat (RAG-based, returns clickable citations) |
+| GET | `/upload/materials/{id}/file` | Original uploaded file (for opening citations) |
+| POST | `/learning/remediate` | Fix-up notes + retest for a failed quiz |
+| GET | `/learning/progress` | Per-topic score history and recovery status |
+| POST | `/viva/start` | Start an oral exam on a lesson |
+| POST | `/viva/{id}/answer` | Grade the answer to the current viva question |
+| GET | `/viva/history` | Past vivas |
+| GET | `/viva/{id}` | Resume or review a viva |
 | GET | `/admin/users` | List all users *(admin only)* |
 | GET | `/admin/stats` | Platform usage stats *(admin only)* |
 
@@ -275,7 +295,6 @@ The platform has two independent content pipelines that converge at a single ret
 
 - Multi-language support
 - Mobile application
-- Chatbot for Oral Quiz
 - Dockerization
 
 ---

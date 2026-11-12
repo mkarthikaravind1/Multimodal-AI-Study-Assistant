@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../api/axios";
 import MarkdownContent from "../components/MarkdownContent";
+import CitationViewer from "../components/CitationViewer";
 import Spinner from "../components/Spinner";
 import usePageTitle from "../hooks/usePageTitle";
 
@@ -118,7 +119,35 @@ function AttachmentPreview({ attachment, onRemove }) {
 
 // ── message bubble ────────────────────────────────────────────────────────────
 
-function MessageBubble({ message }) {
+const SOURCE_ICONS = { pdf: "📄", video: "🎬", image: "🖼️", note: "📖" };
+
+// "Sources" row under an answer — one chip per cited source
+function SourceList({ sources, onCite }) {
+  if (!sources?.length) return null;
+  return (
+    <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap gap-1.5">
+      <span className="text-[11px] font-medium uppercase tracking-wider text-gray-400 mr-1 self-center">
+        Sources
+      </span>
+      {sources.map((s) => (
+        <button
+          key={s.id}
+          type="button"
+          onClick={() => onCite(s)}
+          title={s.type === "note" ? "Open this lesson" : "Open at this spot"}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] text-gray-600
+                     bg-gray-50 border border-gray-200 hover:border-indigo-300 hover:text-indigo-600"
+        >
+          <span className="font-semibold text-indigo-600">{s.id}</span>
+          <span>{SOURCE_ICONS[s.type] ?? "📎"}</span>
+          <span className="truncate max-w-[180px]">{s.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MessageBubble({ message, onCite }) {
   const isUser = message.role === "user";
 
   return (
@@ -164,7 +193,12 @@ function MessageBubble({ message }) {
           >
             {isUser
               ? <pre className="whitespace-pre-wrap font-sans">{message.content}</pre>
-              : <MarkdownContent content={message.content} />
+              : (
+                <>
+                  <MarkdownContent content={message.content} sources={message.sources} onCite={onCite} />
+                  <SourceList sources={message.sources} onCite={onCite} />
+                </>
+              )
             }
           </div>
         )}
@@ -209,6 +243,16 @@ export default function Tutor() {
   const [linkedNote, setLinkedNote] = useState(() =>
     location.state?.noteId ? { id: location.state.noteId, title: location.state.noteTitle } : null
   );
+
+  // Clickable citations: files open in a viewer, lessons open on the Lessons page
+  const [openCitation, setOpenCitation] = useState(null);
+  function handleCite(source) {
+    if (source.type === "note") {
+      navigate("/lesson", { state: { openNoteId: source.note_id } });
+    } else if (source.material_id) {
+      setOpenCitation(source);
+    }
+  }
   const [input, setInput]             = useState("");
   const [sending, setSending]         = useState(false);
   const [chatError, setChatError]     = useState("");
@@ -523,7 +567,7 @@ export default function Tutor() {
               </div>
             )}
 
-            {messages.map((msg, idx) => <MessageBubble key={idx} message={msg} />)}
+            {messages.map((msg, idx) => <MessageBubble key={idx} message={msg} onCite={handleCite} />)}
             {sending && <TypingIndicator />}
 
             {chatError && (
@@ -631,6 +675,10 @@ export default function Tutor() {
           </div>
         </div>
       </div>
+
+      {openCitation && (
+        <CitationViewer citation={openCitation} onClose={() => setOpenCitation(null)} />
+      )}
     </>
   );
 }

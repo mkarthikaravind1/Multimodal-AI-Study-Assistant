@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 from database import get_db, utcnow
 from models import Note, TutorSession, User
 from schemas import ChatRequest, ChatResponse, ChatMessage
-from Services.chat_service import get_tutor_reply
+from Services.chat_service import get_tutor_reply, normalize_citations
+from Services.citations import build_sources, public_citation
 from sqlalchemy.orm.attributes import flag_modified
-from Services.embedding_service import retrieve_relevant_notes
+from Services.embedding_service import retrieve_sources
 from auth import get_current_user
 
 router = APIRouter(prefix="/chat", tags=["Tutor"])
@@ -54,26 +55,37 @@ def chat(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    user_id = current_user.user_id
+
     # Step 1 — Fetch existing session or prepare a new (unsaved) one
-    session = load_or_new_session(db, request.session_id, current_user.user_id, request.note_id)  # type: ignore
+    session = load_or_new_session(db, request.session_id, user_id, request.note_id)  # type: ignore
 
     # Step 2 — Copy history (don't mutate the ORM attribute in place) and add the user message
     history = list(session.messages or [])     # type: ignore
     history.append({"role": "user", "content": request.message})
 
-    # Step 3 — Retrieve relevant notes from ChromaDB
+    # Step 3 — Retrieve relevant chunks from ChromaDB and number them S1, S2, …
     # (if the chat was started from a lesson, that lesson's chunks come first)
-    context_chunks = retrieve_relevant_notes(
+    hits = retrieve_sources(
         query=request.message,
-        user_id=current_user.user_id,       # type: ignore
+        user_id=user_id,                    # type: ignore
         note_id=session.note_id,            # type: ignore
     )
+    note_ids = {h["meta"].get("note_id") for h in hits if h["meta"].get("source") == "note"}
+    note_titles = {
+        n.note_id: n.title
+        for n in db.query(Note).filter(Note.note_id.in_(note_ids), Note.user_id == user_id).all()
+    } if note_ids else {}
+    sources = build_sources(hits, note_titles)    # type: ignore
 
-    # Step 4 — Get LLM reply with context injected (if this fails, nothing is saved)
-    reply = get_tutor_reply(history, context_chunks=context_chunks)  # type: ignore
+    # Step 4 — Get LLM reply (if this fails, nothing is saved)
+    raw_reply = get_tutor_reply(history, sources=sources)
 
-    # Step 5 — Append assistant reply to history
-    history.append({"role": "assistant", "content": reply})
+    # Step 5 — Keep only valid citation tags; attach the cited sources to the reply
+    reply, cited_ids = normalize_citations(raw_reply, {s["id"] for s in sources})
+    by_id = {s["id"]: s for s in sources}
+    cited = [public_citation(by_id[i]) for i in cited_ids]
+    history.append({"role": "assistant", "content": reply, "sources": cited})
 
     # Step 6 — Save to MySQL
     session = save_session(db, session, history)
