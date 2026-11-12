@@ -1,14 +1,7 @@
 import { useEffect, useState } from "react";
 import api, { getErrorMessage } from "../api/axios";
-
-function Spinner() {
-  return (
-    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-    </svg>
-  );
-}
+import Spinner from "../components/Spinner";
+import usePageTitle from "../hooks/usePageTitle";
 
 // ── PHASE 1: Setup form ───────────────────────────────────────────────────────
 function SetupPhase({ onQuizGenerated }) {
@@ -25,7 +18,7 @@ function SetupPhase({ onQuizGenerated }) {
         const res = await api.get("/lessons/all");
         const list = res.data.slice().reverse();
         setLessons(list);
-        if (list.length > 0) setSelectedNote(String(list[0].note_id));
+        if (list.length > 0) selectNote(list[0]);
       } catch {
         setError("Could not load lessons. Generate a lesson first.");
       } finally {
@@ -35,15 +28,12 @@ function SetupPhase({ onQuizGenerated }) {
     fetchLessons();
   }, []);
 
-  // auto-fill topic from selected note title
-  useEffect(() => {
-    if (!selectedNote) return;
-    const note = lessons.find((n) => String(n.note_id) === selectedNote);
-    if (note) {
-      // strip "Notes on " prefix if present
-      setTopic(note.title.replace(/^Notes on /i, "").replace(/^Simplified Notes: /i, ""));
-    }
-  }, [selectedNote, lessons]);
+  // Select a lesson and auto-fill the topic from its title
+  // (done in the event handler, not an effect, so there's no extra render)
+  function selectNote(note) {
+    setSelectedNote(String(note.note_id));
+    setTopic(note.title.replace(/^Notes on /i, "").replace(/^Simplified Notes: /i, ""));
+  }
 
   async function handleGenerate(e) {
     e.preventDefault();
@@ -96,7 +86,10 @@ function SetupPhase({ onQuizGenerated }) {
             ) : (
               <select
                 value={selectedNote}
-                onChange={(e) => setSelectedNote(e.target.value)}
+                onChange={(e) => {
+                  const note = lessons.find((n) => String(n.note_id) === e.target.value);
+                  if (note) selectNote(note);
+                }}
                 className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-800
                            focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                 disabled={generating}
@@ -322,6 +315,7 @@ function ResultsPhase({ result, onRetry }) {
 
 // ── main component ────────────────────────────────────────────────────────────
 export default function Quiz() {
+  usePageTitle("Quiz");
   const [phase, setPhase] = useState("setup"); // "setup" | "quiz" | "results"
   const [quiz, setQuiz] = useState(null);
   const [result, setResult] = useState(null);

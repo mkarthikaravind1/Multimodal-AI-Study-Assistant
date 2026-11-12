@@ -1,30 +1,13 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../api/axios";
 import MarkdownContent from "../components/MarkdownContent";
-
-function Spinner() {
-  return (
-    <svg
-      className="animate-spin h-4 w-4 text-white"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
-      <circle
-        className="opacity-25"
-        cx="12" cy="12" r="10"
-        stroke="currentColor" strokeWidth="4"
-      />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8v8H4z"
-      />
-    </svg>
-  );
-}
+import Spinner from "../components/Spinner";
+import usePageTitle from "../hooks/usePageTitle";
 
 function LessonCard({ lesson, isOpen, onToggle }) {
+  const navigate = useNavigate();
+  const links = lesson.youtube_links ?? [];
   return (
     <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
       {/* ── header (always visible) ── */}
@@ -68,6 +51,30 @@ function LessonCard({ lesson, isOpen, onToggle }) {
           <div className="mt-4 text-sm text-gray-700 leading-relaxed">
               <MarkdownContent content={lesson.content}/>
           </div>
+
+          <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                navigate("/tutor", { state: { noteId: lesson.note_id, noteTitle: lesson.title } })
+              }
+              className="px-3 py-1.5 rounded-xl text-xs font-medium text-white hover:opacity-90"
+              style={{ background: "#4F46E5" }}
+            >
+              💬 Ask the tutor about this
+            </button>
+            {links.map((url, i) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-xl text-xs font-medium border border-red-100 text-red-600 bg-red-50 hover:bg-red-100"
+              >
+                ▶ {i === 0 ? "Watch explainers" : "Find tutorials"} on YouTube
+              </a>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -75,6 +82,7 @@ function LessonCard({ lesson, isOpen, onToggle }) {
 }
 
 export default function Lesson() {
+  usePageTitle("Lessons");
   // ── form state ──────────────────────────────────────────────────────────────
   const [topic, setTopic] = useState("");
   const [studentClass, setStudentClass] = useState("");
@@ -99,7 +107,17 @@ export default function Lesson() {
         setLoadingList(false);
       }
     }
+    async function prefillClass() {
+      try {
+        const res = await api.get("/me");
+        // only fill if the user hasn't started typing
+        if (res.data.student_class) setStudentClass((prev) => prev || res.data.student_class);
+      } catch {
+        // not critical
+      }
+    }
     fetchLessons();
+    prefillClass();
   }, []);
 
   // ── generate new lesson ────────────────────────────────────────────────────
@@ -126,6 +144,7 @@ export default function Lesson() {
         note_id: res.data.note_id,
         title: res.data.title,
         content: res.data.content,
+        youtube_links: res.data.youtube_links,
         created_at: new Date().toISOString(),
       };
       setLessons((prev) => [newLesson, ...prev]);

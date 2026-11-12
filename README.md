@@ -54,47 +54,37 @@ An AI-powered learning platform that helps students learn better by generating q
 
 ```text
 MULTIMODAL AI ASSISTANT/
-
 │
 ├── Frontend/
-│   │
 │   ├── src/
-│   │   ├── api/
-│   │   │   └── axios.js
-│   │   │
-│   │   ├── assets/
-│   │   │
-│   │   ├── components/
-│   │   │
-│   │   ├── context/
-│   │   │
-│   │   ├── pages/
-│   │   │
+│   │   ├── api/            axios instance + error helper
+│   │   ├── components/     Navbar, route guards, Spinner, Markdown renderer
+│   │   ├── context/        auth state (AuthContext.jsx, useAuth.js)
+│   │   ├── hooks/          usePageTitle
+│   │   ├── pages/          one file per page
 │   │   ├── App.jsx
-│   │   ├── App.css
 │   │   ├── main.jsx
 │   │   └── index.css
-│   │
+│   ├── .env.example        VITE_API_URL
 │   ├── package.json
-│   ├── package-lock.json
 │   ├── vite.config.js
-│   ├── eslint.config.js
-│   ├── index.html
-│   └── README.md
+│   └── index.html
 │
-├── Routers/
-│
-├── Services/
+├── Routers/                FastAPI route modules
+├── Services/               LLM, vision, audio, video, embedding logic
+├── migrations/             Alembic database migrations
 │
 ├── auth.py
 ├── database.py
 ├── models.py
 ├── schemas.py
 ├── main.py
+├── create_admin.py         create / promote an admin account
+├── alembic.ini
 ├── requirements.txt
-├── .env
+├── .env.example
 │
-└── Chroma_DB/
+└── Chroma_DB/              local vector store (git-ignored)
 ```
 
 ---
@@ -136,6 +126,16 @@ Backend runs at
 ```text
 http://localhost:8000
 ```
+
+#### Create an admin account
+
+New sign-ups are always students. To create an admin (or promote an existing user):
+
+```bash
+python create_admin.py <username>
+```
+
+You'll be asked for the password at a hidden prompt. Use `--demote` to turn an admin back into a student.
 
 ---
 
@@ -252,10 +252,13 @@ The platform has two independent content pipelines that converge at a single ret
 |--------|----------|-------------|
 | POST | `/register` | Register user |
 | POST | `/login` | Login |
+| GET | `/me` | Current user's profile |
 | POST | `/upload/pdf` | Upload and index a PDF |
 | POST | `/upload/image` | Analyze and index an image |
 | POST | `/upload/audio` | Transcribe audio (Whisper) |
 | POST | `/upload/video` | Analyze video (transcript + frames) |
+| GET | `/upload/materials` | List your uploaded materials |
+| DELETE | `/upload/materials/{id}` | Delete an upload and its indexed content |
 | POST | `/lessons/generate` | Generate an AI lesson on a topic |
 | GET | `/lessons/all` | Get all lessons for the user |
 | POST | `/lessons/regenerate-weak` | Simplify notes for a weak topic |

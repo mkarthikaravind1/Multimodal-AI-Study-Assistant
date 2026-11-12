@@ -2,7 +2,7 @@
 import os
 import time
 from collections import defaultdict, deque
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 
 from fastapi import HTTPException, Depends, APIRouter, status
@@ -10,13 +10,12 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 import bcrypt
-from jose import jwt
-from jose.exceptions import JWTError
+import jwt     # PyJWT (python-jose is unmaintained)
 from dotenv import load_dotenv
 
 from database import get_db, utcnow
 from models import User
-from schemas import RegisterRequest, TokenResponse
+from schemas import RegisterRequest, TokenResponse, MeResponse
 
 load_dotenv()
 secret_key = os.getenv("SECRET_KEY")
@@ -68,8 +67,8 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 def create_token(data: dict) -> str:
     payload = data.copy()
-    payload["exp"] = utcnow() + timedelta(minutes=TOKEN_EXPIRE_MINUTES)
-    return jwt.encode(payload, secret_key, algorithm=ALGORITHM)   # type: ignore
+    payload["exp"] = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_EXPIRE_MINUTES)
+    return jwt.encode(payload, secret_key, algorithm=ALGORITHM)
 
 
 @router.post("/register")
@@ -140,8 +139,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
     try:
         # Step 1 — Decode the JWT (also rejects expired tokens)
-        payload = jwt.decode(token, secret_key, algorithms=[ALGORITHM])   # type: ignore
-    except JWTError:
+        payload = jwt.decode(token, secret_key, algorithms=[ALGORITHM])
+    except jwt.PyJWTError:
         # Invalid signature, expired token, malformed token, etc.
         raise credentials_exception
 
@@ -156,3 +155,13 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
 
     return user
+
+
+@router.get("/me", response_model=MeResponse)
+def get_me(current_user: User = Depends(get_current_user)):
+    """Basic profile of the logged-in user (used to pre-fill the education level)."""
+    return MeResponse(
+        username=current_user.username,                     # type: ignore
+        role=getattr(current_user.role, "value", str(current_user.role)),
+        student_class=current_user.student_class,           # type: ignore
+    )

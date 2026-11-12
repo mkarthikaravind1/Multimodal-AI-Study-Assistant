@@ -1,6 +1,5 @@
-import { createContext, useContext, useMemo, useState } from "react";
-
-const AuthContext = createContext(null);
+import { useMemo, useState } from "react";
+import { AuthContext } from "./useAuth";
 
 // Decode the JWT payload client-side.
 // JWTs use base64url (- and _ instead of + and /), which atob() can't read directly.
@@ -41,7 +40,3 @@ export function AuthProvider({ children }) {
   );
 }
 
-// Custom hook — any component can call useAuth() to get token/user/login/logout
-export function useAuth() {
-  return useContext(AuthContext);
-}

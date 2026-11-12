@@ -1,4 +1,5 @@
 from typing import cast
+from urllib.parse import quote_plus
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -17,13 +18,22 @@ def normalize_topic(topic: str) -> str:
     return " ".join(topic.split())
 
 
-def save_note_and_index(db: Session, user_id: int, title: str, content: str, topic: str) -> Note:
+def youtube_search_links(topic: str, student_class: str) -> list[str]:
+    """
+    YouTube search links for the topic (no API key needed).
+    Stored in notes.youtube_links and shown under each lesson.
+    """
+    queries = [f"{topic} explained", f"{topic} {student_class} tutorial"]
+    return [f"https://www.youtube.com/results?search_query={quote_plus(q)}" for q in queries]
+
+
+def save_note_and_index(db: Session, user_id: int, title: str, content: str, topic: str, youtube_links: list[str]) -> Note:
     """
     Saves the note in MySQL and its vectors in ChromaDB together.
     The note is only committed once the vectors are stored; if either step
     fails, both are rolled back so the two stores never disagree.
     """
-    note = Note(title=title, content=content, youtube_links=[], created_at=utcnow(), user_id=user_id)
+    note = Note(title=title, content=content, youtube_links=youtube_links, created_at=utcnow(), user_id=user_id)
     db.add(note)
     db.flush()      # assigns note_id without committing
 
@@ -49,7 +59,10 @@ def generate_lesson(request: LessonRequest, db: Session = Depends(get_db), curre
     content = generate_notes(topic=topic, student_class=request.student_class)
     title = f"Notes on {topic.title()}"
 
-    new_note = save_note_and_index(db, cast(int, current_user.user_id), title, content, topic)
+    # Remember the student's education level (pre-fills forms, shown to admin)
+    current_user.student_class = request.student_class      # type: ignore
+    links = youtube_search_links(topic, request.student_class)
+    new_note = save_note_and_index(db, cast(int, current_user.user_id), title, content, topic, links)
 
     return LessonResponse(
         note_id=new_note.note_id,        # type: ignore
@@ -57,6 +70,7 @@ def generate_lesson(request: LessonRequest, db: Session = Depends(get_db), curre
         content=new_note.content,        # type: ignore
         topic=topic,
         student_class=request.student_class,
+        youtube_links=new_note.youtube_links or [],     # type: ignore
         message="AI lesson generated and stored successfully"
     )
 
@@ -68,6 +82,7 @@ def get_all_lessons(db: Session = Depends(get_db), current_user: User = Depends(
             "note_id": n.note_id,
             "title": n.title,
             "content": n.content,
+            "youtube_links": n.youtube_links or [],
             "created_at": as_utc(n.created_at)     # type: ignore  — sent with +00:00
         }
         for n in notes
@@ -82,7 +97,9 @@ def regenerate_weak_topic(request: LessonRequest, db: Session = Depends(get_db),
     title = f"Simplified Notes: {topic.title()}"
 
     # Step 2 — Store as a new note (so old confusing note stays for reference)
-    new_note = save_note_and_index(db, cast(int, current_user.user_id), title, content, topic)
+    current_user.student_class = request.student_class      # type: ignore
+    links = youtube_search_links(f"{topic} for beginners", request.student_class)
+    new_note = save_note_and_index(db, cast(int, current_user.user_id), title, content, topic, links)
 
     return LessonResponse(
         note_id=new_note.note_id,        # type: ignore
@@ -90,5 +107,6 @@ def regenerate_weak_topic(request: LessonRequest, db: Session = Depends(get_db),
         content=new_note.content,        # type: ignore
         topic=topic,
         student_class=request.student_class,
+        youtube_links=new_note.youtube_links or [],     # type: ignore
         message="Simplified notes generated for weak topic"
     )

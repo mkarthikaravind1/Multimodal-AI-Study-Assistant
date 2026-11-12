@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api, { getErrorMessage } from "../api/axios";
+import usePageTitle from "../hooks/usePageTitle";
 
 export default function Register() {
+  usePageTitle("Register");
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -86,21 +88,6 @@ export default function Register() {
             />
             <p className="text-xs text-gray-400 mt-1">At least 8 characters</p>
           </div>
-          
-            {/* <select
-              name="student_class"
-              value={formData.student_class}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm
-                         focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Select your year</option>
-              <option value="1st Year">1st Year</option>
-              <option value="2nd Year">2nd Year</option>
-              <option value="3rd Year">3rd Year</option>
-              <option value="4th Year">4th Year</option>
-            </select> */}
 
           <button
             type="submit"

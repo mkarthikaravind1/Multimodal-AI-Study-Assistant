@@ -69,10 +69,23 @@ def add_note_to_vectorstore(note_id: int, content: str, user_id: int, topic: str
     )
 
 
-def retrieve_relevant_notes(query: str, user_id: int, n_results: int = 5) -> list[str]:
+def _query(query_embedding: list[float], where: dict, n_results: int) -> list[tuple[str, dict]]:
+    results = notes_collection.query(
+        query_embeddings=[query_embedding],
+        n_results=n_results,
+        where=where
+    )
+    documents = (results.get('documents') or [[]])[0]
+    metadatas = (results.get('metadatas') or [[]])[0]
+    return list(zip(documents, metadatas))
+
+
+def retrieve_relevant_notes(query: str, user_id: int, n_results: int = 5, note_id: int | None = None) -> list[str]:
     """
     Searches ChromaDB for notes semantically similar to the query.
     Filters by user_id so users only see their own notes.
+    If note_id is given (a chat started from a specific lesson), up to 3 of
+    THAT lesson's chunks come first, followed by the best of everything else.
     Returns a list of relevant text chunks, tagged with their source.
     """
     count = notes_collection.count()
@@ -81,14 +94,23 @@ def retrieve_relevant_notes(query: str, user_id: int, n_results: int = 5) -> lis
 
     query_embedding = embedding_model.encode(query).tolist()
 
-    results = notes_collection.query(
-        query_embeddings=[query_embedding],
-        n_results=n_results,
-        where={"user_id": user_id}
-    )
+    hits: list[tuple[str, dict]] = []
+    if note_id is not None:
+        hits += _query(
+            query_embedding,
+            {"$and": [{"user_id": user_id}, {"note_id": note_id}, {"source": "note"}]},
+            n_results=3,
+        )
 
-    documents = (results.get('documents') or [[]])[0]
-    metadatas = (results.get('metadatas') or [[]])[0]
+    max_hits = len(hits) + n_results
+    seen = {doc for doc, _ in hits}
+    for doc, meta in _query(query_embedding, {"user_id": user_id}, n_results):
+        if doc not in seen and len(hits) < max_hits:
+            hits.append((doc, meta))
+            seen.add(doc)
+
+    documents = [doc for doc, _ in hits]
+    metadatas = [meta for _, meta in hits]
 
     tagged_chunks = []
     for doc, meta in zip(documents, metadatas):

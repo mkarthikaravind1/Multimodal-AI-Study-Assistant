@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import api from "../api/axios";
+import usePageTitle from "../hooks/usePageTitle";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -85,6 +86,7 @@ function EmptyTopics() {
 // ── main component ────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  usePageTitle("Dashboard");
   const { user } = useAuth();
   const navigate = useNavigate();
 

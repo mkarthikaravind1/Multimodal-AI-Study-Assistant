@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../api/axios";
 import MarkdownContent from "../components/MarkdownContent";
+import Spinner from "../components/Spinner";
+import usePageTitle from "../hooks/usePageTitle";
 
 // ── icons ─────────────────────────────────────────────────────────────────────
 
@@ -22,7 +25,7 @@ function PaperclipIcon() {
   );
 }
 
-function MicIcon({ active }) {
+function MicIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -31,17 +34,6 @@ function MicIcon({ active }) {
       <path d="M19 10v2a7 7 0 01-14 0v-2" />
       <line x1="12" y1="19" x2="12" y2="23" />
       <line x1="8" y1="23" x2="16" y2="23" />
-    </svg>
-  );
-}
-
-// ── FIX 2: Spinner with actual SVG content ────────────────────────────────────
-function Spinner({ size = 4, color = "text-white" }) {
-  return (
-    <svg className={`animate-spin h-${size} w-${size} ${color}`}
-      xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
     </svg>
   );
 }
@@ -207,8 +199,16 @@ function TypingIndicator() {
 // ── main component ────────────────────────────────────────────────────────────
 
 export default function Tutor() {
+  usePageTitle("AI Tutor");
   const [messages, setMessages]       = useState([]);
   const [sessionId, setSessionId]     = useState(null);
+
+  // Set when the chat was opened from a lesson's "Ask the tutor" button
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [linkedNote, setLinkedNote] = useState(() =>
+    location.state?.noteId ? { id: location.state.noteId, title: location.state.noteTitle } : null
+  );
   const [input, setInput]             = useState("");
   const [sending, setSending]         = useState(false);
   const [chatError, setChatError]     = useState("");
@@ -367,6 +367,8 @@ export default function Tutor() {
       const res = await api.post("/chat", {
         message: chatMessage,
         session_id: sessionId ?? null,
+        // only sent when starting a session — the backend stores it on the session
+        note_id: sessionId ? null : linkedNote?.id ?? null,
       });
       const assistantReply = res.data.messages[res.data.messages.length - 1];
       setMessages((prev) => [...prev, { ...assistantReply, attachment: null }]);
@@ -442,6 +444,8 @@ export default function Tutor() {
   function handleNewSession() {
     setMessages([]);
     setSessionId(null);
+    setLinkedNote(null);
+    navigate("/tutor", { replace: true, state: null });   // a new session is a general chat
     setChatError("");
     removeAttachment();
     inputRef.current?.focus();
@@ -474,6 +478,9 @@ export default function Tutor() {
             <div>
               <h1 className="text-sm font-semibold text-gray-800">AI Tutor</h1>
               {sessionId && <p className="text-xs text-gray-400">Session #{sessionId}</p>}
+              {linkedNote && (
+                <p className="text-xs text-indigo-500">📖 Focused on: {linkedNote.title}</p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -603,7 +610,7 @@ export default function Tutor() {
                   animation: micActive ? "pulse-ring 1.2s ease-out infinite" : "none",
                 }}
               >
-                <MicIcon active={micActive} />
+                <MicIcon />
               </button>
 
               <button

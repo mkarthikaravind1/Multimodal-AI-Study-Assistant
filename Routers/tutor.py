@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db, utcnow
-from models import TutorSession, User
+from models import Note, TutorSession, User
 from schemas import ChatRequest, ChatResponse, ChatMessage
 from Services.chat_service import get_tutor_reply
 from sqlalchemy.orm.attributes import flag_modified
@@ -27,6 +27,12 @@ def load_or_new_session(db: Session, session_id: int | None, user_id: int, note_
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         return session
+
+    # A new chat can be linked to one of the user's own lessons
+    if note_id is not None:
+        owns_note = db.query(Note).filter(Note.note_id == note_id, Note.user_id == user_id).first()
+        if not owns_note:
+            raise HTTPException(status_code=404, detail="Lesson not found")
 
     return TutorSession(user_id=user_id, note_id=note_id, messages=[], started_at=utcnow())
 
@@ -56,9 +62,11 @@ def chat(
     history.append({"role": "user", "content": request.message})
 
     # Step 3 — Retrieve relevant notes from ChromaDB
+    # (if the chat was started from a lesson, that lesson's chunks come first)
     context_chunks = retrieve_relevant_notes(
         query=request.message,
-        user_id=current_user.user_id  # type: ignore
+        user_id=current_user.user_id,       # type: ignore
+        note_id=session.note_id,            # type: ignore
     )
 
     # Step 4 — Get LLM reply with context injected (if this fails, nothing is saved)

@@ -10,19 +10,9 @@ Password = Annotated[str, StringConstraints(min_length=8, max_length=72)]   # bc
 Topic = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 StudentClass = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
 
-# class RegisterRequest(BaseModel):
-#     username: str
-#     password: str
-#     student_class: str
-
 class RegisterRequest(BaseModel):
     username: Username      # 3-50 chars: letters, digits, _ . -
     password: Password      # 8-72 chars
-    #role: str
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
 
 class TokenResponse(BaseModel):
     access_token:str
@@ -38,7 +28,13 @@ class LessonResponse(BaseModel):
     content: str
     topic: str
     student_class: str
+    youtube_links: list[str]
     message: str
+
+class MeResponse(BaseModel):
+    username: str
+    role: str
+    student_class: str | None     # last education level the student used
 
 # Single MCQ shape
 class MCQQuestion(BaseModel):
@@ -100,10 +96,6 @@ class AnalyticsResponse(BaseModel):
     strong:list[str]
     weak:list[str]
     topic_breakdown:list[TopicAverage]
-
-class WeakTopicRequest(BaseModel):
-    topic: Topic
-    student_class: StudentClass
 
 class ChatMessage(BaseModel):
     role: str       # "user" or "assistant"

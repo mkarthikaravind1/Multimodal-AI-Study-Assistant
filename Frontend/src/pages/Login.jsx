@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import api, { getErrorMessage } from "../api/axios";
+import usePageTitle from "../hooks/usePageTitle";
 
 export default function Login() {
+  usePageTitle("Login");
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -40,9 +42,6 @@ export default function Login() {
     }
   };
 
-  useEffect(() => {
-        document.title = "Multimodal AI Study Assistant";
-    }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">

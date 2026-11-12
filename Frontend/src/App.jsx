@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
 import Navbar from "./components/Navbar";
-import { useAuth } from "./context/AuthContext";
+import { useAuth } from "./context/useAuth";
 
 import Login     from "./pages/Login";
 import Register  from "./pages/Register";
@@ -12,6 +12,7 @@ import Quiz      from "./pages/Quiz";
 import Analytics from "./pages/Analytics";
 import Tutor     from "./pages/Tutor";
 import Admin     from "./pages/Admin";
+import NotFound  from "./pages/NotFound";
 
 function DefaultRedirect() {
   const { user } = useAuth();
@@ -39,6 +40,9 @@ export default function App() {
 
         {/* Default */}
         <Route path="/" element={<DefaultRedirect />} />
+
+        {/* Anything else */}
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   );

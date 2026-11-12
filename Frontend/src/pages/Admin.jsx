@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import api, { getErrorMessage } from "../api/axios";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
+import usePageTitle from "../hooks/usePageTitle";
 
 function StatCard({ label, value, icon, color }) {
   return (
@@ -36,6 +37,7 @@ function RoleBadge({ role }) {
 }
 
 export default function Admin() {
+  usePageTitle("Admin Panel");
   const { logout } = useAuth();
   const navigate = useNavigate();
 
@@ -88,9 +90,6 @@ export default function Admin() {
       ]
     : [];
     
-  useEffect(() => {
-      document.title = "Admin Panel | Multimodal AI Study Assistant";
-  }, []);
   
   return (
     <div className="min-h-screen" style={{ background: "#F8F7FF" }}>
@@ -114,16 +113,6 @@ export default function Admin() {
             Logout
           </button>
         </div>
-        {/* <div className="mb-8">
-          <p className="text-xs font-medium uppercase tracking-widest text-gray-400 mb-1">
-            Admin panel
-          </p>
-          <h1 className="text-3xl font-bold text-gray-900">Overview</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Platform-wide stats and registered user list.
-          </p>
-        </div> */}
-          
 
         {error && (
           <div className="mb-6 px-4 py-3 rounded-xl bg-red-50 text-red-600 text-sm border border-red-100">
