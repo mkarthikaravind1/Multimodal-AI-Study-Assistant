@@ -22,6 +22,8 @@ An AI-powered learning platform that helps students learn better by generating q
 
 ### ✨ Standout features
 
+- **Live streaming answers** — tutor replies and lesson notes type out word by word (Server-Sent Events),
+  with a Stop button. Nothing is saved until the answer is complete, so a stopped or failed stream leaves no half messages.
 - **Clickable source citations** — the AI Tutor cites where every fact came from, inline as `[S1]`, `[S2]`.
   Clicking a citation opens the PDF **at the exact page**, plays the video **from the exact timestamp**
   (Whisper segment timings), shows the image, or jumps to the lesson.
@@ -273,12 +275,14 @@ The platform has two independent content pipelines that converge at a single ret
 | GET | `/upload/materials` | List your uploaded materials |
 | DELETE | `/upload/materials/{id}` | Delete an upload and its indexed content |
 | POST | `/lessons/generate` | Generate an AI lesson on a topic |
+| POST | `/lessons/generate/stream` | Same, streamed live as Server-Sent Events |
 | GET | `/lessons/all` | Get all lessons for the user |
 | POST | `/lessons/regenerate-weak` | Simplify notes for a weak topic |
 | POST | `/quiz/generate` | Generate a quiz from a lesson |
 | POST | `/quiz/submit` | Submit answers and get scored results |
 | GET | `/analytics` | User's quiz analytics (weak/strong topics) |
 | POST | `/chat` | AI Tutor chat (RAG-based, returns clickable citations) |
+| POST | `/chat/stream` | Same, streamed live as Server-Sent Events |
 | GET | `/upload/materials/{id}/file` | Original uploaded file (for opening citations) |
 | POST | `/learning/remediate` | Fix-up notes + retest for a failed quiz |
 | GET | `/learning/progress` | Per-topic score history and recovery status |

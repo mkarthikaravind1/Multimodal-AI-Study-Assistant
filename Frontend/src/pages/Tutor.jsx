@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../api/axios";
+import { streamPost } from "../api/stream";
 import MarkdownContent from "../components/MarkdownContent";
 import CitationViewer from "../components/CitationViewer";
 import Spinner from "../components/Spinner";
@@ -255,6 +256,11 @@ export default function Tutor() {
   }
   const [input, setInput]             = useState("");
   const [sending, setSending]         = useState(false);
+  const abortRef = useRef(null);          // AbortController of the answer being streamed
+  const [streaming, setStreaming] = useState(false);
+
+  // Leaving the page cancels a streaming answer (nothing is saved for it)
+  useEffect(() => () => abortRef.current?.abort(), []);
   const [chatError, setChatError]     = useState("");
 
   const [attachment, setAttachment] = useState(null);
@@ -406,25 +412,55 @@ export default function Tutor() {
       chatMessage = `Regarding the video I just uploaded (filename: ${currentAttachment.file.name}): ${userIntent}`;
     }
 
-    // call /chat
+    // call /chat/stream — the answer types out live
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setStreaming(true);
+    setMessages((prev) => [...prev, { role: "assistant", content: "", streaming: true, attachment: null }]);
+    const updateLast = (fn) => setMessages((prev) => [...prev.slice(0, -1), fn(prev[prev.length - 1])]);
+
     try {
-      const res = await api.post("/chat", {
-        message: chatMessage,
-        session_id: sessionId ?? null,
-        // only sent when starting a session — the backend stores it on the session
-        note_id: sessionId ? null : linkedNote?.id ?? null,
-      });
-      const assistantReply = res.data.messages[res.data.messages.length - 1];
-      setMessages((prev) => [...prev, { ...assistantReply, attachment: null }]);
-      setSessionId(res.data.session_id);
+      await streamPost(
+        "/chat/stream",
+        {
+          message: chatMessage,
+          session_id: sessionId ?? null,
+          // only sent when starting a session — the backend stores it on the session
+          note_id: sessionId ? null : linkedNote?.id ?? null,
+        },
+        {
+          signal: controller.signal,
+          onToken: (piece) => updateLast((m) => ({ ...m, content: m.content + piece })),
+          // the final reply has cleaned-up citation tags + the cited sources
+          onDone: (data) => {
+            updateLast(() => ({ role: "assistant", content: data.reply, sources: data.sources, attachment: null }));
+            setSessionId(data.session_id);
+          },
+        }
+      );
     } catch (err) {
-      setChatError(getErrorMessage(err, "Message failed. Try again."));
-      setMessages((prev) => prev.slice(0, -1));
-      setInput(text);   // give the user their question back so they can retry
+      if (err.name === "AbortError") {
+        // Stopped by the user: keep what was written so far, clearly marked
+        updateLast((m) => ({
+          ...m,
+          streaming: false,
+          content: (m.content || "") + "\n\n*— stopped, not saved —*",
+        }));
+      } else {
+        setChatError(err.message || "Message failed. Try again.");
+        setMessages((prev) => prev.slice(0, -2));   // remove the half answer and the question
+        setInput(text);   // give the user their question back so they can retry
+      }
     } finally {
+      abortRef.current = null;
+      setStreaming(false);
       setSending(false);
       inputRef.current?.focus();
     }
+  }
+
+  function stopAnswer() {
+    abortRef.current?.abort();
   }
 
   function handleKeyDown(e) {
@@ -486,6 +522,7 @@ export default function Tutor() {
   }
 
   function handleNewSession() {
+    abortRef.current?.abort();
     setMessages([]);
     setSessionId(null);
     setLinkedNote(null);
@@ -567,8 +604,10 @@ export default function Tutor() {
               </div>
             )}
 
-            {messages.map((msg, idx) => <MessageBubble key={idx} message={msg} onCite={handleCite} />)}
-            {sending && <TypingIndicator />}
+            {messages
+              .filter((msg) => !(msg.streaming && !msg.content))
+              .map((msg, idx) => <MessageBubble key={idx} message={msg} onCite={handleCite} />)}
+            {sending && !messages[messages.length - 1]?.content && <TypingIndicator />}
 
             {chatError && (
               <div className="text-center">
@@ -657,16 +696,30 @@ export default function Tutor() {
                 <MicIcon />
               </button>
 
-              <button
-                type="button"
-                onClick={handleSend}
-                disabled={!canSend}
-                className="flex-shrink-0 mb-1 w-8 h-8 rounded-xl flex items-center justify-center
-                           text-white transition-opacity hover:opacity-90 disabled:opacity-30"
-                style={{ background: "#4F46E5" }}
-              >
-                {sending ? <Spinner size={4} /> : <SendIcon />}
-              </button>
+              {streaming ? (
+                <button
+                  type="button"
+                  onClick={stopAnswer}
+                  title="Stop generating"
+                  aria-label="Stop generating"
+                  className="flex-shrink-0 mb-1 w-8 h-8 rounded-xl flex items-center justify-center
+                             text-white transition-opacity hover:opacity-90"
+                  style={{ background: "#EF4444" }}
+                >
+                  <span className="block w-2.5 h-2.5 bg-white rounded-sm" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={!canSend}
+                  className="flex-shrink-0 mb-1 w-8 h-8 rounded-xl flex items-center justify-center
+                             text-white transition-opacity hover:opacity-90 disabled:opacity-30"
+                  style={{ background: "#4F46E5" }}
+                >
+                  {sending ? <Spinner size={4} /> : <SendIcon />}
+                </button>
+              )}
             </div>
 
             <p className="text-xs text-gray-300 mt-2 text-center">

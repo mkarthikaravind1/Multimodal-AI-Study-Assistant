@@ -39,6 +39,15 @@ def as_utc(value: datetime | None) -> datetime | None:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
 
+def get_session_factory():
+    """
+    For streaming endpoints: the stream keeps running after the request's own
+    DB session (get_db) may have been closed, so the generator opens its own
+    session from this factory when it needs to save. Overridable in tests.
+    """
+    return SessionLocal
+
+
 def get_db():
     db = SessionLocal()
     try:

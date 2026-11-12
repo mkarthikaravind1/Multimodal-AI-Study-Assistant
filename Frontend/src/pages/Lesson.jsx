@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api, { getErrorMessage } from "../api/axios";
+import { streamPost } from "../api/stream";
 import MarkdownContent from "../components/MarkdownContent";
 import Spinner from "../components/Spinner";
 import usePageTitle from "../hooks/usePageTitle";
@@ -99,6 +100,11 @@ export default function Lesson() {
   const [topic, setTopic] = useState("");
   const [studentClass, setStudentClass] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [draft, setDraft] = useState(null);   // notes being streamed in (null = not generating)
+  const abortRef = useRef(null);
+
+  // Leaving the page cancels generation (nothing is saved for it)
+  useEffect(() => () => abortRef.current?.abort(), []);
   const [formError, setFormError] = useState("");
 
   // ── lessons list state ──────────────────────────────────────────────────────
@@ -148,27 +154,38 @@ export default function Lesson() {
     }
     setFormError("");
     setGenerating(true);
+    setDraft("");
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const res = await api.post("/lessons/generate", {
-        topic: topic.trim(),
-        student_class: studentClass,
-      });
-      // prepend to list and auto-open the new lesson
-      const newLesson = {
-        note_id: res.data.note_id,
-        title: res.data.title,
-        content: res.data.content,
-        youtube_links: res.data.youtube_links,
-        created_at: new Date().toISOString(),
-      };
-      setLessons((prev) => [newLesson, ...prev]);
-      setOpenId(newLesson.note_id);
-      setTopic("");
-    } catch (err) {
-      setFormError(
-        getErrorMessage(err, "Generation failed. Please try again.")
+      // notes type out live in the draft card, then become a saved lesson
+      await streamPost(
+        "/lessons/generate/stream",
+        { topic: topic.trim(), student_class: studentClass },
+        {
+          signal: controller.signal,
+          onToken: (piece) => setDraft((d) => (d ?? "") + piece),
+          onDone: (data) => {
+            const newLesson = {
+              note_id: data.note_id,
+              title: data.title,
+              content: data.content,
+              youtube_links: data.youtube_links,
+              created_at: new Date().toISOString(),
+            };
+            setLessons((prev) => [newLesson, ...prev]);
+            setOpenId(newLesson.note_id);
+            setTopic("");
+          },
+        }
       );
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        setFormError(err.message || getErrorMessage(err, "Generation failed. Please try again."));
+      }
     } finally {
+      abortRef.current = null;
+      setDraft(null);
       setGenerating(false);
     }
   }
@@ -280,9 +297,13 @@ export default function Lesson() {
                 </button>
 
                 {generating && (
-                  <p className="text-xs text-center text-gray-400">
-                    The AI is writing your notes — this takes 5–15 seconds.
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => abortRef.current?.abort()}
+                    className="text-xs text-center text-gray-400 hover:text-red-500"
+                  >
+                    Writing live on the right… <span className="underline">cancel</span>
+                  </button>
                 )}
               </form>
             </div>
@@ -290,6 +311,21 @@ export default function Lesson() {
 
           {/* ── RIGHT: lessons list ── */}
           <div className="lg:col-span-2 flex flex-col gap-3">
+            {draft !== null && (
+              <div className="bg-white border border-indigo-200 ring-2 ring-indigo-50 rounded-2xl shadow-sm p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Spinner size={4} color="text-indigo-500" />
+                  <p className="text-sm font-semibold text-gray-800">Writing notes on {topic || "your topic"}…</p>
+                </div>
+                {draft ? (
+                  <div className="text-sm text-gray-700 leading-relaxed">
+                    <MarkdownContent content={draft} />
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">Waiting for the first words…</p>
+                )}
+              </div>
+            )}
             {loadingList ? (
               // skeleton
               [...Array(3)].map((_, i) => (

@@ -6,9 +6,12 @@ load_dotenv()
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-def generate_notes(topic: str, student_class: str, easy_mode: bool = False) -> str:
+LESSON_MODEL = "llama-3.1-8b-instant"
+
+
+def lesson_messages(topic: str, student_class: str, easy_mode: bool = False) -> list[dict]:
     """
-    Calls Groq LLM and returns generated study notes as a string.
+    Builds the prompt for study notes (shared by the normal and streaming versions).
     easy_mode=True → simpler language, more examples, used for weak topics.
     """
 
@@ -44,23 +47,42 @@ def generate_notes(topic: str, student_class: str, easy_mode: bool = False) -> s
         Keep it concise and easy to understand.
         """
 
+    return [
+        {
+            "role": "system",
+            "content": "You are a helpful study assistant that generates clear educational notes."
+        },
+        {
+            "role": "user",
+            "content": prompt
+        }
+    ]
+
+
+def generate_notes(topic: str, student_class: str, easy_mode: bool = False) -> str:
+    """Calls Groq LLM and returns generated study notes as a string."""
     response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful study assistant that generates clear educational notes."
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
+        model=LESSON_MODEL,
+        messages=lesson_messages(topic, student_class, easy_mode),   # type: ignore
         temperature=0.7,
         max_tokens=1024
     )
 
     return response.choices[0].message.content or ""
+
+
+def stream_notes(topic: str, student_class: str, easy_mode: bool = False):
+    """Same as generate_notes, but yields the text piece by piece as the model writes it."""
+    stream = client.chat.completions.create(
+        model=LESSON_MODEL,
+        messages=lesson_messages(topic, student_class, easy_mode),   # type: ignore
+        temperature=0.7,
+        max_tokens=1024,
+        stream=True,
+    )
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
 
 
 def generate_remediation_notes(topic: str, student_class: str, mistakes: list[dict]) -> str:

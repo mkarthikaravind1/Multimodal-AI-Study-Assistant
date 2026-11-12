@@ -3,10 +3,11 @@ from urllib.parse import quote_plus
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from database import get_db, utcnow, as_utc
+from database import get_db, get_session_factory, utcnow, as_utc
 from models import Note, User
 from schemas import LessonRequest, LessonResponse
-from Services.lesson_generator import generate_notes
+from Services.lesson_generator import generate_notes, stream_notes
+from Services.sse import sse, sse_response, friendly_error
 from auth import get_current_user
 from Services.embedding_service import add_note_to_vectorstore, delete_note_vectors
 
@@ -73,6 +74,63 @@ def generate_lesson(request: LessonRequest, db: Session = Depends(get_db), curre
         youtube_links=new_note.youtube_links or [],     # type: ignore
         message="AI lesson generated and stored successfully"
     )
+
+@router.post("/generate/stream")
+def generate_lesson_stream(
+    request: LessonRequest,
+    current_user: User = Depends(get_current_user),
+    session_factory=Depends(get_session_factory),
+):
+    """
+    Same as POST /lessons/generate, but streams the notes as Server-Sent Events:
+      token → {"text"}  …many…
+      done  → LessonResponse (the note is saved at this point)
+      error → {"detail"} (nothing saved)
+    """
+    topic = normalize_topic(request.topic)
+    user_id = cast(int, current_user.user_id)
+    student_class = request.student_class
+
+    def events():
+        parts: list[str] = []
+        try:
+            for piece in stream_notes(topic, student_class):
+                parts.append(piece)
+                yield sse("token", {"text": piece})
+        except Exception as e:
+            yield sse("error", {"detail": friendly_error(e)})
+            return
+
+        content = "".join(parts)
+        if not content.strip():
+            yield sse("error", {"detail": "The AI returned empty notes. Please try again."})
+            return
+
+        try:
+            with session_factory() as db:
+                user = db.get(User, user_id)
+                user.student_class = student_class          # type: ignore — remember education level
+                note = save_note_and_index(
+                    db, user_id, f"Notes on {topic.title()}", content, topic,
+                    youtube_search_links(topic, student_class),
+                )
+                result = LessonResponse(
+                    note_id=note.note_id,                     # type: ignore
+                    title=note.title,                         # type: ignore
+                    content=note.content,                     # type: ignore
+                    topic=topic,
+                    student_class=student_class,
+                    youtube_links=note.youtube_links or [],   # type: ignore
+                    message="AI lesson generated and stored successfully",
+                )
+        except Exception as e:
+            yield sse("error", {"detail": "The notes were generated but could not be saved. " + friendly_error(e)})
+            return
+
+        yield sse("done", result.model_dump())
+
+    return sse_response(events())
+
 
 @router.get("/all")
 def get_all_lessons(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

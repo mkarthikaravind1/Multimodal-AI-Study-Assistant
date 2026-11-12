@@ -38,11 +38,14 @@ def describe_source(source: dict) -> str:
     return f'Lesson notes "{source.get("label", "notes")}"'
 
 
-def get_tutor_reply(messages: list[dict], sources: list[dict] | None = None) -> str:
+TUTOR_MODEL = "llama-3.1-8b-instant"
+
+
+def build_chat_messages(messages: list[dict], sources: list[dict] | None = None) -> list[ChatCompletionMessageParam]:
     """
-    Calls Groq LLM with conversation history.
-    sources: [{"id": "S1", "type": ..., "text": ..., ...}] — injected into the
-    last user message so the model can answer from them and cite [S1].
+    Builds the exact message list sent to the LLM (shared by the normal and
+    streaming tutor). sources: [{"id": "S1", "type": ..., "text": ..., ...}] —
+    injected into the last user message so the model can answer from them and cite [S1].
     """
 
     # Step 0 — Recent window only, and ONLY role + content (stored messages also
@@ -68,20 +71,36 @@ def get_tutor_reply(messages: list[dict], sources: list[dict] | None = None) -> 
             ),
         }
 
-    final_messages: list[ChatCompletionMessageParam] = [
+    return [
         {"role": "system", "content": SYSTEM_PROMPT},
         *messages,   # type: ignore
     ]
 
-    # Step 2 — Send request to Groq client
+
+def get_tutor_reply(messages: list[dict], sources: list[dict] | None = None) -> str:
+    """Calls Groq LLM with conversation history and returns the full reply."""
     response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=final_messages,
+        model=TUTOR_MODEL,
+        messages=build_chat_messages(messages, sources),
         temperature=0.7,
         max_tokens=1024
     )
 
     return response.choices[0].message.content or ""
+
+
+def stream_tutor_reply(messages: list[dict], sources: list[dict] | None = None):
+    """Same as get_tutor_reply, but yields the reply piece by piece as the model writes it."""
+    stream = client.chat.completions.create(
+        model=TUTOR_MODEL,
+        messages=build_chat_messages(messages, sources),
+        temperature=0.7,
+        max_tokens=1024,
+        stream=True,
+    )
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
 
 
 _BRACKET_GROUP = re.compile(r"\[((?:\s*S\d+\s*[,;]?)+)\]")
