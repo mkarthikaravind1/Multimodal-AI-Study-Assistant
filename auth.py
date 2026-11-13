@@ -15,7 +15,8 @@ from dotenv import load_dotenv
 
 from database import get_db, utcnow
 from models import User
-from schemas import RegisterRequest, TokenResponse, MeResponse
+from schemas import RegisterRequest, TokenResponse, MeResponse, ProfileUpdate
+from Services.language import normalize_language
 
 load_dotenv()
 secret_key = os.getenv("SECRET_KEY")
@@ -164,4 +165,14 @@ def get_me(current_user: User = Depends(get_current_user)):
         username=current_user.username,                     # type: ignore
         role=getattr(current_user.role, "value", str(current_user.role)),
         student_class=current_user.student_class,           # type: ignore
+        preferred_language=normalize_language(current_user.preferred_language),   # type: ignore
     )
+
+
+@router.patch("/me", response_model=MeResponse)
+def update_me(request: ProfileUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Profile settings the student can change (currently: reply language)."""
+    current_user.preferred_language = request.preferred_language     # type: ignore
+    db.commit()
+    db.refresh(current_user)
+    return get_me(current_user)

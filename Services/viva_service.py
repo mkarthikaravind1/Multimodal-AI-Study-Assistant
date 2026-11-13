@@ -45,7 +45,7 @@ def _ask_json(system: str, prompt: str, temperature: float, max_tokens: int) -> 
     return data
 
 
-def generate_viva_questions(content: str, topic: str, count: int) -> list[dict]:
+def generate_viva_questions(content: str, topic: str, count: int, language_note: str = "") -> list[dict]:
     """Returns [{"question": str, "key_points": [str, ...]}, ...] (at least min(3, count))."""
     prompt = f"""
     You are an examiner conducting a VIVA (oral exam) on "{topic}".
@@ -66,6 +66,8 @@ def generate_viva_questions(content: str, topic: str, count: int) -> list[dict]:
     Return a JSON object exactly like:
     {{"questions": [{{"question": "...", "key_points": ["...", "..."]}}]}}
     """
+    if language_note:
+        prompt += f"\n    LANGUAGE of the questions and key points: {language_note} Keep the JSON keys in English.\n"
     data = _ask_json(
         "You are a fair, encouraging university viva examiner. Respond with JSON only.",
         prompt, temperature=0.6, max_tokens=1200,
@@ -90,7 +92,7 @@ def generate_viva_questions(content: str, topic: str, count: int) -> list[dict]:
     return questions
 
 
-def grade_answer(question: str, key_points: list[str], answer: str, content: str) -> dict:
+def grade_answer(question: str, key_points: list[str], answer: str, content: str, language_note: str = "") -> dict:
     """
     Returns {"score": 0-10, "feedback": str, "ideal_answer": str, "missed_points": [str]}.
     """
@@ -122,7 +124,10 @@ def grade_answer(question: str, key_points: list[str], answer: str, content: str
       "ideal_answer": "a concise model answer in 2-4 sentences",
       "missed_points": ["key point they missed", "..."]
     }}
+    The answer may be in English, Hindi, Tamil, Hinglish or Tanglish — grade the ideas, not the language.
     """
+    if language_note:
+        prompt += f"\n    LANGUAGE of feedback, ideal_answer and missed_points: {language_note} Keep the JSON keys in English.\n"
     data = _ask_json(
         "You are a fair, encouraging university viva examiner. Respond with JSON only.",
         prompt, temperature=0.2, max_tokens=700,

@@ -31,10 +31,16 @@ class LessonResponse(BaseModel):
     youtube_links: list[str]
     message: str
 
+LanguageCode = Literal["en", "hi", "ta", "hinglish", "tanglish", "auto"]
+
 class MeResponse(BaseModel):
     username: str
     role: str
     student_class: str | None     # last education level the student used
+    preferred_language: LanguageCode = "en"
+
+class ProfileUpdate(BaseModel):
+    preferred_language: LanguageCode
 
 QuestionType = Literal["mcq", "true_false", "fill_blank", "numerical"]
 Difficulty = Literal["easy", "medium", "hard", "mixed"]

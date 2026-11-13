@@ -9,6 +9,7 @@ from schemas import LessonRequest, LessonResponse
 from Services.lesson_generator import generate_notes, stream_notes
 from Services.sse import sse, sse_response, friendly_error
 from auth import get_current_user
+from Services.language import language_note
 from Services.embedding_service import add_note_to_vectorstore, delete_note_vectors
 
 router = APIRouter(prefix="/lessons", tags=["Lessons"])
@@ -57,7 +58,8 @@ def save_note_and_index(db: Session, user_id: int, title: str, content: str, top
 @router.post("/generate", response_model=LessonResponse)
 def generate_lesson(request: LessonRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     topic = normalize_topic(request.topic)
-    content = generate_notes(topic=topic, student_class=request.student_class)
+    lang = language_note(current_user.preferred_language, topic)     # type: ignore — "auto": language of the topic
+    content = generate_notes(topic=topic, student_class=request.student_class, language_note=lang)
     title = f"Notes on {topic.title()}"
 
     # Remember the student's education level (pre-fills forms, shown to admin)
@@ -90,11 +92,12 @@ def generate_lesson_stream(
     topic = normalize_topic(request.topic)
     user_id = cast(int, current_user.user_id)
     student_class = request.student_class
+    lang = language_note(current_user.preferred_language, topic)     # type: ignore
 
     def events():
         parts: list[str] = []
         try:
-            for piece in stream_notes(topic, student_class):
+            for piece in stream_notes(topic, student_class, language_note=lang):
                 parts.append(piece)
                 yield sse("token", {"text": piece})
         except Exception as e:
@@ -151,7 +154,8 @@ def regenerate_weak_topic(request: LessonRequest, db: Session = Depends(get_db),
     topic = normalize_topic(request.topic)
 
     # Step 1 — Generate notes with easy_mode=True
-    content = generate_notes(topic, request.student_class, easy_mode=True)
+    lang = language_note(current_user.preferred_language, topic)     # type: ignore
+    content = generate_notes(topic, request.student_class, easy_mode=True, language_note=lang)
     title = f"Simplified Notes: {topic.title()}"
 
     # Step 2 — Store as a new note (so old confusing note stays for reference)

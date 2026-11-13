@@ -9,6 +9,7 @@ from groq import Groq
 from dotenv import load_dotenv
 
 from Services.answer_check import QUESTION_TYPES, parse_number
+from Services.language import language_instruction
 
 load_dotenv()
 
@@ -170,11 +171,16 @@ def generate_quiz(
     question_types: list[str] | None = None,
     difficulty: str = "medium",
     count: int = 5,
+    language_note: str = "",
 ) -> list[dict]:
     """
     Generates `count` questions of the requested types and difficulty from the notes.
     focus: questions the student previously got wrong — the new quiz re-tests
            the same concepts with DIFFERENT questions (self-healing loop).
+    language_note: reply-language instruction — applies to the FEEDBACK only
+           (explanation + option_explanations). Questions, options and answers
+           stay in English so marking (exact options, typo-tolerant fill-ins,
+           "True"/"False") keeps working.
     Raises QuizGenerationError if the model output is unusable.
     """
     types = tuple(t for t in (question_types or ["mcq"]) if t in QUESTION_TYPES) or ("mcq",)
@@ -219,6 +225,13 @@ def generate_quiz(
 
     Return a JSON object in exactly this format (this example is about a different topic):
     {FORMAT_EXAMPLE}
+    """
+    if language_note and language_note != language_instruction("en"):
+        prompt += f"""
+    LANGUAGE OF THE FEEDBACK: write every "explanation" and every VALUE in "option_explanations"
+    as follows — {language_note}
+    Keep "question", "options", "correct_answer", "accepted_answers", "unit", the JSON keys
+    and the option texts used as keys in "option_explanations" in ENGLISH, exactly as above.
     """
 
     response = client.chat.completions.create(

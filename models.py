@@ -19,6 +19,9 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     student_class = Column(String(50))
     role = Column(Enum(RoleEnum), nullable=False, default=RoleEnum.student)
+    # Reply language for tutor, lessons, quiz feedback and viva:
+    # en | hi | ta | hinglish | tanglish | auto  (see Services/language.py)
+    preferred_language = Column(String(12), nullable=False, default="en", server_default="en")
     registered_date = Column(DateTime, default=utcnow)
 
     # Relationships — lets you do user.notes, user.quizzes etc.

@@ -9,10 +9,11 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 LESSON_MODEL = "llama-3.1-8b-instant"
 
 
-def lesson_messages(topic: str, student_class: str, easy_mode: bool = False) -> list[dict]:
+def lesson_messages(topic: str, student_class: str, easy_mode: bool = False, language_note: str = "") -> list[dict]:
     """
     Builds the prompt for study notes (shared by the normal and streaming versions).
     easy_mode=True → simpler language, more examples, used for weak topics.
+    language_note: reply-language instruction (Services/language.py).
     """
 
     if easy_mode:
@@ -47,10 +48,15 @@ def lesson_messages(topic: str, student_class: str, easy_mode: bool = False) -> 
         Keep it concise and easy to understand.
         """
 
+    system = "You are a helpful study assistant that generates clear educational notes."
+    if language_note:
+        system += f" LANGUAGE: {language_note}"
+        prompt += f"\n        Language: {language_note} (Translate the section headings too.)\n"
+
     return [
         {
             "role": "system",
-            "content": "You are a helpful study assistant that generates clear educational notes."
+            "content": system
         },
         {
             "role": "user",
@@ -59,11 +65,11 @@ def lesson_messages(topic: str, student_class: str, easy_mode: bool = False) -> 
     ]
 
 
-def generate_notes(topic: str, student_class: str, easy_mode: bool = False) -> str:
+def generate_notes(topic: str, student_class: str, easy_mode: bool = False, language_note: str = "") -> str:
     """Calls Groq LLM and returns generated study notes as a string."""
     response = client.chat.completions.create(
         model=LESSON_MODEL,
-        messages=lesson_messages(topic, student_class, easy_mode),   # type: ignore
+        messages=lesson_messages(topic, student_class, easy_mode, language_note),   # type: ignore
         temperature=0.7,
         max_tokens=1024
     )
@@ -71,11 +77,11 @@ def generate_notes(topic: str, student_class: str, easy_mode: bool = False) -> s
     return response.choices[0].message.content or ""
 
 
-def stream_notes(topic: str, student_class: str, easy_mode: bool = False):
+def stream_notes(topic: str, student_class: str, easy_mode: bool = False, language_note: str = ""):
     """Same as generate_notes, but yields the text piece by piece as the model writes it."""
     stream = client.chat.completions.create(
         model=LESSON_MODEL,
-        messages=lesson_messages(topic, student_class, easy_mode),   # type: ignore
+        messages=lesson_messages(topic, student_class, easy_mode, language_note),   # type: ignore
         temperature=0.7,
         max_tokens=1024,
         stream=True,
@@ -85,7 +91,7 @@ def stream_notes(topic: str, student_class: str, easy_mode: bool = False):
             yield chunk.choices[0].delta.content
 
 
-def generate_remediation_notes(topic: str, student_class: str, mistakes: list[dict]) -> str:
+def generate_remediation_notes(topic: str, student_class: str, mistakes: list[dict], language_note: str = "") -> str:
     """
     Self-healing loop: notes aimed at exactly what the student got wrong.
     mistakes: [{"question", "user_answer", "correct_answer"}] — user_answer may be
@@ -115,11 +121,15 @@ def generate_remediation_notes(topic: str, student_class: str, mistakes: list[di
     2. Concepts to fix (one short section per concept, with a heading)
     3. Quick memory tips (bullet points)
     """
+    system = "You are a patient tutor who repairs specific misunderstandings."
+    if language_note:
+        system += f" LANGUAGE: {language_note}"
+        prompt += f"\n    Language: {language_note} (Translate the section headings too.)\n"
 
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=[
-            {"role": "system", "content": "You are a patient tutor who repairs specific misunderstandings."},
+            {"role": "system", "content": system},
             {"role": "user", "content": prompt},
         ],
         temperature=0.6,

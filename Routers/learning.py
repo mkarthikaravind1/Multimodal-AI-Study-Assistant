@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
+from Services.language import language_note
 from database import get_db, utcnow, as_utc
 from models import Note, QuizDetail, User
 from schemas import (
@@ -89,8 +90,15 @@ def remediate(request: RemediateRequest, db: Session = Depends(get_db), current_
     topic = cast(str, quiz.topic)
     student_class = cast(str, current_user.student_class) or "college"
 
+    # "auto" follows the language of the lesson this quiz was taken on
+    original_note = db.get(Note, quiz.note_id)
+    lang = language_note(
+        current_user.preferred_language,                                     # type: ignore
+        cast(str, original_note.content) if original_note else topic,
+    )
+
     # Generate BOTH before saving anything, so a failure leaves no half-finished loop
-    content = generate_remediation_notes(topic, student_class, mistakes)
+    content = generate_remediation_notes(topic, student_class, mistakes, language_note=lang)
     try:
         # Retest in the same format as the original: same question types, difficulty and length
         questions = generate_quiz(
@@ -99,6 +107,7 @@ def remediate(request: RemediateRequest, db: Session = Depends(get_db), current_
             question_types=list(dict.fromkeys(qtype(q) for q in quiz.questions)),   # type: ignore
             difficulty=cast(str, quiz.difficulty) or "medium",
             count=max(3, min(10, cast(int, quiz.total_questions))),
+            language_note=lang,
         )
     except QuizGenerationError as e:
         raise HTTPException(status_code=502, detail=str(e))

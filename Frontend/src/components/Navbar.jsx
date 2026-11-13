@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
+import LanguageMenu from "./LanguageMenu";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -14,7 +15,7 @@ export default function Navbar() {
   if (user.role === "admin") return null; // the admin page has its own header + logout
 
   return (
-    <nav className="bg-blue-700 text-white px-6 py-3 flex justify-between items-center gap-4">
+    <nav className="bg-blue-700 text-white px-6 py-3 flex flex-wrap justify-between items-center gap-4">
       {/* wraps on narrow screens instead of running off the edge */}
       <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm font-medium">
         <Link to="/dashboard" className="hover:text-blue-200">Dashboard</Link>
@@ -27,6 +28,7 @@ export default function Navbar() {
         <Link to="/check-work" className="hover:text-blue-200">Check Work</Link>
       </div>
       <div className="flex items-center gap-4 text-sm flex-shrink-0">
+        <LanguageMenu />
         <span className="text-blue-200">Hi, {user.username}</span>
         <button
           onClick={handleLogout}

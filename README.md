@@ -38,6 +38,11 @@ An AI-powered learning platform that helps students learn better by generating q
 - **Spaced-repetition flashcards (SM-2)** — cards made by AI from any lesson, plus every wrong quiz answer and
   weak viva answer turned into a card automatically. A daily review queue (Again / Hard / Good / Easy, with keyboard
   shortcuts) schedules each card right before you'd forget it. One-click export to Anki.
+- **Tamil / Hindi / English-mixed replies** — pick English, Hindi, Tamil, Hinglish, Tanglish or **Auto** from the
+  🌐 menu in the navbar (saved to your profile). It applies to the tutor, lessons, fix-up notes, quiz explanations and
+  the viva. *Auto* answers in the language you asked in: script detection plus common romanised Hindi/Tamil words,
+  so "photosynthesis enna?" gets a Tanglish answer. Quiz questions stay in English so answers can be marked reliably,
+  and the viva reads Hindi/Tamil questions aloud with a matching voice when the browser has one.
 - **Handwritten solution checking** — photograph your worked maths/science solution and the vision model
   (Llama 4 Scout) transcribes every line, re-does each step and marks it ✓ / ✗ / "carries the earlier mistake",
   pointing to the **first mistake** with what went wrong and a hint (the corrected step stays hidden until you ask).
@@ -280,6 +285,7 @@ The platform has two independent content pipelines that converge at a single ret
 | POST | `/register` | Register user |
 | POST | `/login` | Login |
 | GET | `/me` | Current user's profile |
+| PATCH | `/me` | Update profile settings (reply language) |
 | POST | `/upload/pdf` | Upload and index a PDF |
 | POST | `/upload/image` | Analyze and index an image |
 | POST | `/upload/audio` | Transcribe audio (Whisper) |
@@ -318,7 +324,6 @@ The platform has two independent content pipelines that converge at a single ret
 
 ## 🎯 Future Improvements
 
-- Multi-language support
 - Mobile application
 - Dockerization
 

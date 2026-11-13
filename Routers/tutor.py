@@ -12,6 +12,7 @@ from Services.citations import build_sources, public_citation
 from sqlalchemy.orm.attributes import flag_modified
 from Services.embedding_service import retrieve_sources
 from auth import get_current_user
+from Services.language import language_note
 
 router = APIRouter(prefix="/chat", tags=["Tutor"])
 
@@ -91,7 +92,9 @@ def chat(
     session, history, sources = prepare_chat(db, request, cast(int, current_user.user_id))
 
     # Get LLM reply (if this fails, nothing is saved)
-    reply, cited = finish_reply(get_tutor_reply(history, sources=sources), sources)
+    # Reply language from the profile ("auto" → the language of this question)
+    lang = language_note(current_user.preferred_language, request.message)     # type: ignore
+    reply, cited = finish_reply(get_tutor_reply(history, sources=sources, language_note=lang), sources)
     history.append({"role": "assistant", "content": reply, "sources": cited})
 
     session = save_session(db, session, history)
@@ -122,11 +125,12 @@ def chat_stream(
     session, history, sources = prepare_chat(db, request, user_id)
     existing_id = session.session_id
     note_id = session.note_id
+    lang = language_note(current_user.preferred_language, request.message)     # type: ignore
 
     def events():
         parts: list[str] = []
         try:
-            for piece in stream_tutor_reply(history, sources=sources):
+            for piece in stream_tutor_reply(history, sources=sources, language_note=lang):
                 parts.append(piece)
                 yield sse("token", {"text": piece})
         except Exception as e:      # Groq error, network error, …

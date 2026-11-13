@@ -21,6 +21,7 @@ from schemas import (
     VideoAnalysisResponse, MaterialResponse,
 )
 from auth import get_current_user
+from Services.language import language_note
 from Services.embedding_service import (
     chunk_text, chunk_timed_segments, add_pdf_chunks_to_vectorstore, delete_material_vectors,
 )
@@ -218,7 +219,9 @@ def upload_image(
     session = load_or_new_session(db, session_id, user_id)
 
     # Step 1 — Get vision LLM answer (send the real MIME type)
-    answer = analyze_image(image_bytes, question, mime_type=cast(str, file.content_type))
+    # (the reply-language instruction goes to the model only — the stored question stays as typed)
+    lang = language_note(current_user.preferred_language, question)     # type: ignore
+    answer = analyze_image(image_bytes, f"{question}\n\n{lang}", mime_type=cast(str, file.content_type))
 
     # Step 2 — Store question + answer in ChromaDB so the tutor can retrieve it later
     combined_text = (

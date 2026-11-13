@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from auth import get_current_user
+from Services.language import language_note
 from database import get_db, utcnow, as_utc
 from models import Note, User, VivaSession
 from schemas import (
@@ -85,7 +86,11 @@ def start_viva(request: VivaStartRequest, db: Session = Depends(get_db), current
 
     topic = _topic_from_title(cast(str, note.title))
     try:
-        questions = generate_viva_questions(cast(str, note.content), topic, request.num_questions)
+        questions = generate_viva_questions(
+            cast(str, note.content), topic, request.num_questions,
+            # "auto": ask in the language of the lesson notes
+            language_note=language_note(current_user.preferred_language, cast(str, note.content)),   # type: ignore
+        )
     except VivaError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
@@ -125,6 +130,8 @@ def answer_question(viva_id: int, request: VivaAnswerRequest, db: Session = Depe
         grading = grade_answer(
             questions[index]["question"], questions[index].get("key_points", []),
             answer, cast(str, note.content) if note else "",
+            # "auto": give feedback in the language the student answered in
+            language_note=language_note(current_user.preferred_language, answer),   # type: ignore
         )
     except VivaError as e:
         raise HTTPException(status_code=502, detail=str(e))

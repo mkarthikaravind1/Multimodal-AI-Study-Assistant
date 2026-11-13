@@ -8,6 +8,7 @@ from schemas import QuestionPublic, QuizRequest, QuizResponse, QuizSubmitRequest
 from Services.answer_check import check_answer, why_wrong, qtype
 from Services.quiz_generator import generate_quiz, QuizGenerationError
 from auth import get_current_user
+from Services.language import language_note
 from Services.learning_loop import PASS_MARK, loop_round
 from Services.flashcard_service import add_cards
 
@@ -43,6 +44,8 @@ def generate_quiz_route(request: QuizRequest, db: Session = Depends(get_db), cur
             question_types=list(dict.fromkeys(request.question_types)),
             difficulty=request.difficulty,
             count=request.count,
+            # explanations in the student's language ("auto": the lesson's language)
+            language_note=language_note(current_user.preferred_language, str(note.content)),   # type: ignore
         )
     except QuizGenerationError as e:
         raise HTTPException(status_code=502, detail=str(e))
