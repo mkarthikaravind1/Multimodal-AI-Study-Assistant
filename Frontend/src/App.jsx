@@ -15,6 +15,7 @@ import Admin     from "./pages/Admin";
 import NotFound  from "./pages/NotFound";
 import Viva      from "./pages/Viva";
 import Flashcards from "./pages/Flashcards";
+import CheckWork from "./pages/CheckWork";
 
 function DefaultRedirect() {
   const { user } = useAuth();
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/tutor"     element={<ProtectedRoute><Tutor /></ProtectedRoute>} />
         <Route path="/viva"      element={<ProtectedRoute><Viva /></ProtectedRoute>} />
         <Route path="/flashcards" element={<ProtectedRoute><Flashcards /></ProtectedRoute>} />
+        <Route path="/check-work" element={<ProtectedRoute><CheckWork /></ProtectedRoute>} />
 
         {/* Admin only */}
         <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />

@@ -254,7 +254,8 @@ export default function Tutor() {
       setOpenCitation(source);
     }
   }
-  const [input, setInput]             = useState("");
+  // "Ask the tutor why" from Check my work pre-fills the question (not sent until the user presses Send)
+  const [input, setInput]             = useState(() => location.state?.prefill ?? "");
   const [sending, setSending]         = useState(false);
   const abortRef = useRef(null);          // AbortController of the answer being streamed
   const [streaming, setStreaming] = useState(false);

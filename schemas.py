@@ -307,3 +307,47 @@ class FlashcardStats(BaseModel):
 class DueCards(BaseModel):
     cards: list[FlashcardOut]
     stats: FlashcardStats
+
+# ── Handwritten solution checking ─────────────────────────────────────────────
+class SolutionStep(BaseModel):
+    text: str
+    status: Literal["correct", "error", "follows_error", "unclear"]
+    comment: str
+    correction: str
+
+class SolutionCheckOut(BaseModel):
+    check_id: int
+    topic: str | None
+    problem: str | None
+    expected_answer: str | None
+    final_answer: str | None
+    filename: str
+    steps: list[SolutionStep]
+    verdict: Literal["correct", "incorrect", "incomplete", "unreadable"]
+    score: int | None                # 0-10 (None when the photo couldn't be read)
+    first_error_step: int | None     # 0-based index into steps
+    error_type: str | None           # arithmetic | algebra | sign | concept | ...
+    summary: str
+    hint: str
+    correct_answer: str
+    answer_matches_expected: bool | None
+    rechecks: int
+    flashcard_added: bool = False
+    created_at: datetime | None
+    updated_at: datetime | None
+
+class SolutionSummary(BaseModel):
+    check_id: int
+    title: str                       # problem (shortened) or file name
+    topic: str | None
+    verdict: str
+    score: int | None
+    created_at: datetime | None
+
+SolutionStepText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+
+class SolutionRecheckRequest(BaseModel):
+    """The student's corrected transcription — steps they say were misread."""
+    steps: list[SolutionStepText] = Field(min_length=1, max_length=40)
+    problem: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None = None
+    final_answer: Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)] | None = None

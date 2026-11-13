@@ -17,6 +17,7 @@ const SOURCE_LABELS = {
   note: { label: "Lesson", bg: "#EEF2FF", fg: "#4338CA" },
   mistake: { label: "Quiz mistake", bg: "#FEE2E2", fg: "#B91C1C" },
   viva: { label: "Viva", bg: "#F3E8FF", fg: "#7E22CE" },
+  solution: { label: "Solution mistake", bg: "#FFEDD5", fg: "#C2410C" },
   manual: { label: "Added by you", bg: "#F3F4F6", fg: "#4B5563" },
 };
 

@@ -38,6 +38,11 @@ An AI-powered learning platform that helps students learn better by generating q
 - **Spaced-repetition flashcards (SM-2)** — cards made by AI from any lesson, plus every wrong quiz answer and
   weak viva answer turned into a card automatically. A daily review queue (Again / Hard / Good / Easy, with keyboard
   shortcuts) schedules each card right before you'd forget it. One-click export to Anki.
+- **Handwritten solution checking** — photograph your worked maths/science solution and the vision model
+  (Llama 4 Scout) transcribes every line, re-does each step and marks it ✓ / ✗ / "carries the earlier mistake",
+  pointing to the **first mistake** with what went wrong and a hint (the corrected step stays hidden until you ask).
+  If a line was misread you can fix the transcription and re-check. An optional answer key is compared
+  deterministically. A mistake can be saved as a "spot the mistake" flashcard or sent to the tutor.
 - **Viva / oral-exam mode** — an AI examiner asks open-ended questions out loud (browser text-to-speech),
   you answer by voice (Whisper) or text, and each answer is graded 0–10 with feedback, a model answer
   and the key points you missed. Past vivas can be resumed or reviewed.
@@ -302,6 +307,10 @@ The platform has two independent content pipelines that converge at a single ret
 | POST | `/flashcards/generate` | AI flashcards from a lesson |
 | GET / POST | `/flashcards` | List / add cards (PATCH, DELETE `/flashcards/{id}`) |
 | GET | `/flashcards/export/anki` | Download all cards for Anki import |
+| POST | `/solutions/check` | Photo of handwritten working → step-by-step marking, first mistake |
+| POST | `/solutions/{id}/recheck` | Re-mark with a corrected transcription |
+| POST | `/solutions/{id}/flashcard` | Save the first mistake as a flashcard |
+| GET | `/solutions/history` | Past solution checks (`GET` / `DELETE /solutions/{id}`, `GET /solutions/{id}/image`) |
 | GET | `/admin/users` | List all users *(admin only)* |
 | GET | `/admin/stats` | Platform usage stats *(admin only)* |
 

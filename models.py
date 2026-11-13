@@ -127,3 +127,27 @@ class Flashcard(Base):
     due_at           = Column(DateTime, nullable=False, default=utcnow, index=True)
     last_reviewed_at = Column(DateTime, nullable=True)
     created_at       = Column(DateTime, default=utcnow)
+
+
+class SolutionCheck(Base):
+    """A photo of handwritten working, checked step by step by the vision model."""
+    __tablename__ = "solution_checks"
+
+    check_id        = Column(Integer, primary_key=True, index=True)
+    user_id         = Column(Integer, ForeignKey("user_details.user_id"), nullable=False, index=True)
+    topic           = Column(String(255), nullable=True)
+    problem         = Column(Text, nullable=True)            # typed by the student or read from the photo
+    expected_answer = Column(String(255), nullable=True)     # from the student's answer key (optional)
+    final_answer    = Column(String(255), nullable=True)     # what the student wrote
+    filename        = Column(String(255), nullable=False)
+    stored_path     = Column(String(500), nullable=True)     # uploads/<user_id>/solutions/<check_id><ext>
+    mime_type       = Column(String(50), nullable=False)
+    # [{text, status, comment, correction}]  status: correct | error | follows_error | unclear
+    steps           = Column(JSON, nullable=False)
+    # {first_error_step, error_type, summary, hint, correct_answer, answer_matches_expected}
+    result          = Column(JSON, nullable=False)
+    verdict         = Column(String(20), nullable=False)     # correct | incorrect | incomplete | unreadable
+    score           = Column(Integer, nullable=True)         # 0-10 (NULL when unreadable)
+    rechecks        = Column(Integer, nullable=False, default=0)
+    created_at      = Column(DateTime, default=utcnow)
+    updated_at      = Column(DateTime, nullable=True)
