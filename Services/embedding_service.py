@@ -80,12 +80,18 @@ def _query(query_embedding: list[float], where: dict, n_results: int) -> list[tu
     return list(zip(documents, metadatas))
 
 
-def retrieve_sources(query: str, user_id: int, n_results: int = 5, note_id: int | None = None) -> list[dict]:
+def retrieve_sources(
+    query: str, user_id: int, n_results: int = 5, note_id: int | None = None,
+    material_id: int | None = None, material_source: str | None = None,
+) -> list[dict]:
     """
     Searches ChromaDB for the chunks most relevant to the query.
     Filters by user_id so users only see their own material.
     If note_id is given (a chat started from a specific lesson), up to 3 of
     THAT lesson's chunks come first, followed by the best of everything else.
+
+    If material_id (+ material_source: pdf / image / video) is given — "only
+    search this document" — ONLY that upload's chunks are searched.
 
     Returns [{"text": chunk_text, "meta": chunk_metadata}, ...] — the metadata
     (source type, filename, page, start time, ids) is what makes citations clickable.
@@ -95,6 +101,15 @@ def retrieve_sources(query: str, user_id: int, n_results: int = 5, note_id: int 
         return []
 
     query_embedding = embedding_model.encode(query).tolist()
+
+    if material_id is not None:
+        where = {"$and": [{"user_id": user_id}, {"material_id": material_id}, {"source": material_source or "pdf"}]}
+        stored = notes_collection.get(where=where, include=[])
+        found = len(stored.get("ids") or [])
+        if not found:
+            return []
+        hits_only = _query(query_embedding, where, n_results=min(found, n_results + 1))
+        return [{"text": doc, "meta": dict(meta or {})} for doc, meta in hits_only]
 
     hits: list[tuple[str, dict]] = []
     if note_id is not None:

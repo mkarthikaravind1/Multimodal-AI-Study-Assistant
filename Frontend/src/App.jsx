@@ -23,6 +23,7 @@ const Flashcards  = lazy(() => import("./pages/Flashcards"));
 const CheckWork   = lazy(() => import("./pages/CheckWork"));
 const Planner     = lazy(() => import("./pages/Planner"));
 const ConceptMaps = lazy(() => import("./pages/ConceptMaps"));
+const Library     = lazy(() => import("./pages/Library"));
 
 function DefaultRedirect() {
   const { user } = useAuth();
@@ -58,6 +59,7 @@ export default function App() {
           <Route path="/check-work" element={<ProtectedRoute><CheckWork /></ProtectedRoute>} />
           <Route path="/planner"    element={<ProtectedRoute><Planner /></ProtectedRoute>} />
           <Route path="/maps"       element={<ProtectedRoute><ConceptMaps /></ProtectedRoute>} />
+          <Route path="/library"    element={<ProtectedRoute><Library /></ProtectedRoute>} />
           <Route path="/print/lesson/:noteId" element={<ProtectedRoute><LessonPrint /></ProtectedRoute>} />
 
           {/* Admin only */}

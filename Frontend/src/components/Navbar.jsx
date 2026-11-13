@@ -25,6 +25,7 @@ export default function Navbar() {
         <Link to="/quiz" className="hover:text-blue-200">Quiz</Link>
         <Link to="/analytics" className="hover:text-blue-200">Analytics</Link>
         <Link to="/tutor" className="hover:text-blue-200">Tutor</Link>
+        <Link to="/library" className="hover:text-blue-200">Library</Link>
         <Link to="/viva" className="hover:text-blue-200">Viva</Link>
         <Link to="/flashcards" className="hover:text-blue-200">Flashcards</Link>
         <Link to="/check-work" className="hover:text-blue-200">Check Work</Link>

@@ -38,6 +38,10 @@ An AI-powered learning platform that helps students learn better by generating q
 - **Spaced-repetition flashcards (SM-2)** — cards made by AI from any lesson, plus every wrong quiz answer and
   weak viva answer turned into a card automatically. A daily review queue (Again / Hard / Good / Easy, with keyboard
   shortcuts) schedules each card right before you'd forget it. One-click export to Anki.
+- **Chat history & materials library** — every tutor chat is kept in a sidebar (Today / Yesterday / …): resume it,
+  rename it, delete it, or search across all your chats' titles *and* messages. The **Library** lists everything you've
+  uploaded — open it, map it, delete it (its indexed text goes too), or **"Ask about this"**: the tutor then searches
+  *only that document* and says so when the answer isn't in it. The focus is remembered per chat.
 - **Concept maps & mind maps** — one click on a lesson (or pick any uploaded PDF or video) and the AI pulls out the key
   ideas and how they connect. View it as a **mind map** or a **concept map** with labelled links and cross-connections,
   zoom, download as SVG or print it. The model only returns a small validated graph; the Mermaid diagram is built from it
@@ -313,7 +317,9 @@ The platform has two independent content pipelines that converge at a single ret
 | POST | `/quiz/submit` | Submit answers and get scored results |
 | GET | `/analytics` | User's quiz analytics (weak/strong topics) |
 | POST | `/chat` | AI Tutor chat (RAG-based, returns clickable citations) |
-| POST | `/chat/stream` | Same, streamed live as Server-Sent Events |
+| POST | `/chat/stream` | Same, streamed live as Server-Sent Events (`material_id` → only search that document) |
+| GET | `/chat/sessions` | Chat history, newest first (`?q=` searches titles and messages) |
+| GET / PATCH / DELETE | `/chat/sessions/{id}` | Resume, rename or delete a chat |
 | GET | `/upload/materials/{id}/file` | Original uploaded file (for opening citations) |
 | POST | `/learning/remediate` | Fix-up notes + retest for a failed quiz |
 | GET | `/learning/progress` | Per-topic score history and recovery status |

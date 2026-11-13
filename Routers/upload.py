@@ -15,7 +15,7 @@ from pdf2image import convert_from_bytes
 from pdf2image.exceptions import PDFInfoNotInstalledError
 
 from database import get_db, utcnow, as_utc
-from models import ConceptMap, UploadedMaterial, User
+from models import ConceptMap, TutorSession, UploadedMaterial, User
 from schemas import (
     PDFUploadResponse, ImageAnalysisResponse, AudioTranscriptResponse,
     VideoAnalysisResponse, MaterialResponse,
@@ -357,12 +357,13 @@ def upload_video(
             chunks.append(text)
             chunk_meta.append({})
 
-        save_material_and_index(
+        material = save_material_and_index(
             db, cast(int, current_user.user_id), filename, "video", chunks,
             chunk_meta=chunk_meta, source_path=temp_video_path,
         )
 
         return VideoAnalysisResponse(
+            material_id=cast(int, material.material_id),
             filename=filename,
             transcript=result["transcript"],
             frame_descriptions=result["frame_descriptions"],
@@ -415,6 +416,10 @@ def delete_material(material_id: int, db: Session = Depends(get_db), current_use
         ConceptMap.user_id == current_user.user_id,
         ConceptMap.source_type == "material", ConceptMap.source_id == material_id,
     ).delete()
+    # chats that were "only searching this document" go back to all materials
+    db.query(TutorSession).filter(
+        TutorSession.user_id == current_user.user_id, TutorSession.material_id == material_id,
+    ).update({TutorSession.material_id: None})
     if material.stored_path:
         stored = UPLOAD_DIR / str(material.stored_path)
         if stored.exists():

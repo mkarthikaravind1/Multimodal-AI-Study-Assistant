@@ -42,13 +42,15 @@ TUTOR_MODEL = "llama-3.1-8b-instant"
 
 
 def build_chat_messages(
-    messages: list[dict], sources: list[dict] | None = None, language_note: str = ""
+    messages: list[dict], sources: list[dict] | None = None, language_note: str = "",
+    focus_document: str = "",
 ) -> list[ChatCompletionMessageParam]:
     """
     Builds the exact message list sent to the LLM (shared by the normal and
     streaming tutor). sources: [{"id": "S1", "type": ..., "text": ..., ...}] —
     injected into the last user message so the model can answer from them and cite [S1].
     language_note: reply-language instruction (Services/language.py).
+    focus_document: "only search this document" — the file name the student chose.
     """
 
     # Step 0 — Recent window only, and ONLY role + content (stored messages also
@@ -75,6 +77,13 @@ def build_chat_messages(
         }
 
     system = SYSTEM_PROMPT
+    if focus_document:
+        system += (
+            f'\n\nDOCUMENT FOCUS: the student asked you to answer ONLY from "{focus_document}". '
+            "Use only the provided sources from it. If they don't contain the answer, say clearly "
+            f'that "{focus_document}" doesn\'t cover this (you may add one line of general guidance, '
+            "marked as not from the document)."
+        )
     if language_note:
         system += (
             f"\n\nLANGUAGE: {language_note} "
@@ -93,11 +102,13 @@ def build_chat_messages(
     ]
 
 
-def get_tutor_reply(messages: list[dict], sources: list[dict] | None = None, language_note: str = "") -> str:
+def get_tutor_reply(
+    messages: list[dict], sources: list[dict] | None = None, language_note: str = "", focus_document: str = "",
+) -> str:
     """Calls Groq LLM with conversation history and returns the full reply."""
     response = client.chat.completions.create(
         model=TUTOR_MODEL,
-        messages=build_chat_messages(messages, sources, language_note),
+        messages=build_chat_messages(messages, sources, language_note, focus_document),
         temperature=0.7,
         max_tokens=1024
     )
@@ -105,11 +116,13 @@ def get_tutor_reply(messages: list[dict], sources: list[dict] | None = None, lan
     return response.choices[0].message.content or ""
 
 
-def stream_tutor_reply(messages: list[dict], sources: list[dict] | None = None, language_note: str = ""):
+def stream_tutor_reply(
+    messages: list[dict], sources: list[dict] | None = None, language_note: str = "", focus_document: str = "",
+):
     """Same as get_tutor_reply, but yields the reply piece by piece as the model writes it."""
     stream = client.chat.completions.create(
         model=TUTOR_MODEL,
-        messages=build_chat_messages(messages, sources, language_note),
+        messages=build_chat_messages(messages, sources, language_note, focus_document),
         temperature=0.7,
         max_tokens=1024,
         stream=True,

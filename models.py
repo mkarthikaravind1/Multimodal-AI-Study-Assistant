@@ -77,6 +77,10 @@ class TutorSession(Base):
     note_id = Column(Integer, ForeignKey("notes.note_id"), nullable=True)  # nullable
     messages = Column(JSON, nullable=False)   # stores conversation history array
     started_at = Column(DateTime, default=utcnow)
+    title = Column(String(200), nullable=True)        # first question, or renamed by the student
+    updated_at = Column(DateTime, nullable=True)      # last message — sorts the history sidebar
+    # "Only search this document": the upload the chat is focused on (cleared if it is deleted)
+    material_id = Column(Integer, nullable=True)
 
     user = relationship("User", back_populates="tutor_sessions")
     note = relationship("Note", back_populates="tutor_sessions")

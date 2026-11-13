@@ -72,7 +72,7 @@ export default function CitationViewer({ citation, onClose }) {
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-gray-100">
           <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-widest text-gray-400">
-              Source [{citation.id}]
+              {citation.id ? `Source [${citation.id}]` : "Your upload"}
             </p>
             <p className="text-sm font-semibold text-gray-800 truncate">{citation.label}</p>
           </div>

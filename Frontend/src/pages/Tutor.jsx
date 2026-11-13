@@ -4,6 +4,8 @@ import api, { getErrorMessage } from "../api/axios";
 import { streamPost } from "../api/stream";
 import MarkdownContent from "../components/MarkdownContent";
 import CitationViewer from "../components/CitationViewer";
+import ChatHistory from "../components/ChatHistory";
+import DocumentFocus from "../components/DocumentFocus";
 import Spinner from "../components/Spinner";
 import usePageTitle from "../hooks/usePageTitle";
 
@@ -237,6 +239,10 @@ export default function Tutor() {
   usePageTitle("AI Tutor");
   const [messages, setMessages]       = useState([]);
   const [sessionId, setSessionId]     = useState(null);
+  const [sessionTitle, setSessionTitle] = useState("");
+  const [historyKey, setHistoryKey]   = useState(0);       // bump → history sidebar reloads
+  const [historyOpen, setHistoryOpen] = useState(false);   // mobile drawer
+  const [loadingSession, setLoadingSession] = useState(false);
 
   // Set when the chat was opened from a lesson's "Ask the tutor" button
   const location = useLocation();
@@ -244,6 +250,10 @@ export default function Tutor() {
   const [linkedNote, setLinkedNote] = useState(() =>
     location.state?.noteId ? { id: location.state.noteId, title: location.state.noteTitle } : null
   );
+  // "Only search this document" — from the Library's "Ask about this", or picked here
+  const [focusDoc, setFocusDoc] = useState(() => location.state?.focusMaterial ?? null);
+  // a PDF / video just uploaded here → offer to focus on it
+  const [lastUpload, setLastUpload] = useState(null);
 
   // Clickable citations: files open in a viewer, lessons open on the Lessons page
   const [openCitation, setOpenCitation] = useState(null);
@@ -391,10 +401,15 @@ export default function Tutor() {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
 
+    if (uploadResult?.material_id && currentAttachment.type !== "image") {
+      setLastUpload({ id: uploadResult.material_id, filename: currentAttachment.file.name, type: currentAttachment.type });
+    }
+
     // image: answer comes directly from upload response
     if (currentAttachment?.type === "image" && uploadResult?.answer) {
       setMessages((prev) => [...prev, { role: "assistant", content: uploadResult.answer, attachment: null }]);
       setSessionId(uploadResult.session_id);
+      setHistoryKey((k) => k + 1);
       setAttachment(null);
       setSending(false);
       return;
@@ -428,6 +443,7 @@ export default function Tutor() {
           session_id: sessionId ?? null,
           // only sent when starting a session — the backend stores it on the session
           note_id: sessionId ? null : linkedNote?.id ?? null,
+          material_id: focusDoc?.id ?? null,
         },
         {
           signal: controller.signal,
@@ -436,6 +452,8 @@ export default function Tutor() {
           onDone: (data) => {
             updateLast(() => ({ role: "assistant", content: data.reply, sources: data.sources, attachment: null }));
             setSessionId(data.session_id);
+            if (!sessionId) setSessionTitle(text.length > 60 ? `${text.slice(0, 59)}…` : text || "New chat");
+            setHistoryKey((k) => k + 1);
           },
         }
       );
@@ -522,10 +540,40 @@ export default function Tutor() {
     }
   }
 
+  async function openSession(id) {
+    if (id === sessionId) {
+      setHistoryOpen(false);
+      return;
+    }
+    abortRef.current?.abort();
+    setLoadingSession(true);
+    setChatError("");
+    try {
+      const res = await api.get(`/chat/sessions/${id}`);
+      const d = res.data;
+      setMessages(d.messages.map((m) => ({ ...m, attachment: null })));
+      setSessionId(d.session_id);
+      setSessionTitle(d.title);
+      setLinkedNote(d.note_id ? { id: d.note_id, title: d.note_title || "a lesson" } : null);
+      setFocusDoc(d.material_id ? { id: d.material_id, filename: d.material_filename, type: d.material_type } : null);
+      setLastUpload(null);
+      removeAttachment();
+      setHistoryOpen(false);
+    } catch (err) {
+      setChatError(getErrorMessage(err, "Couldn't open that chat."));
+    } finally {
+      setLoadingSession(false);
+    }
+  }
+
   function handleNewSession() {
     abortRef.current?.abort();
     setMessages([]);
     setSessionId(null);
+    setSessionTitle("");
+    setFocusDoc(null);
+    setLastUpload(null);
+    setHistoryOpen(false);
     setLinkedNote(null);
     navigate("/tutor", { replace: true, state: null });   // a new session is a general chat
     setChatError("");
@@ -550,27 +598,56 @@ export default function Tutor() {
         }
       `}</style>
 
-      <div className="flex flex-col" style={{ height: "calc(100vh - 52px)", background: "#F8F7FF" }}>
+      <div className="flex" style={{ height: "calc(100vh - 52px)", background: "#F8F7FF" }}>
+        {/* ── chat history: sidebar on large screens, drawer on small ones ── */}
+        {historyOpen && (
+          <div className="lg:hidden fixed inset-0 bg-black/30 z-40" onClick={() => setHistoryOpen(false)} aria-hidden="true" />
+        )}
+        <aside
+          className={`${historyOpen ? "fixed inset-y-0 left-0 z-50 shadow-xl" : "hidden"} lg:static lg:block lg:shadow-none
+                      w-72 flex-shrink-0 bg-gray-50 border-r border-gray-100`}
+          aria-label="Chat history"
+        >
+          <ChatHistory
+            activeId={sessionId}
+            refreshKey={historyKey}
+            onOpen={openSession}
+            onNew={handleNewSession}
+            onDeleted={(id) => id === sessionId && handleNewSession()}
+            onRenamed={(s) => s.session_id === sessionId && setSessionTitle(s.title)}
+          />
+        </aside>
+
+      <div className="flex flex-col flex-1 min-w-0">
 
         {/* ── top bar ── */}
         <div className="flex-shrink-0 bg-white border-b border-gray-100 px-6 py-3
                         flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+              className="lg:hidden px-2 py-1 rounded-lg border border-gray-200 text-sm text-gray-500"
+              aria-label="Show chat history"
+            >
+              ☰
+            </button>
             <span className="text-xl">💬</span>
-            <div>
-              <h1 className="text-sm font-semibold text-gray-800">AI Tutor</h1>
-              {sessionId && <p className="text-xs text-gray-400">Session #{sessionId}</p>}
+            <div className="min-w-0">
+              <h1 className="text-sm font-semibold text-gray-800 truncate">{sessionTitle || "AI Tutor"}</h1>
+              {sessionTitle && <p className="text-xs text-gray-400">AI Tutor</p>}
               {linkedNote && (
                 <p className="text-xs text-indigo-500">📖 Focused on: {linkedNote.title}</p>
               )}
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {loadingSession && <Spinner color="text-indigo-600" />}
             {messages.length > 0 && (
               <button onClick={handleNewSession}
-                className="text-xs px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500
+                className="lg:hidden text-xs px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500
                            hover:bg-gray-50 transition-colors">
-                New session
+                New chat
               </button>
             )}
           </div>
@@ -629,6 +706,19 @@ export default function Tutor() {
                 <AttachmentPreview attachment={attachment} onRemove={removeAttachment} />
               </div>
             )}
+
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <DocumentFocus value={focusDoc} onChange={setFocusDoc} disabled={sending} />
+              {lastUpload && !focusDoc && (
+                <button
+                  type="button"
+                  onClick={() => setFocusDoc(lastUpload)}
+                  className="text-xs text-indigo-600 hover:underline"
+                >
+                  Only search “{lastUpload.filename}”?
+                </button>
+              )}
+            </div>
 
             {micError && <p className="text-xs text-red-500 mb-2 ml-1">{micError}</p>}
             {transcribing && (
@@ -728,6 +818,7 @@ export default function Tutor() {
             </p>
           </div>
         </div>
+      </div>
       </div>
 
       {openCitation && (

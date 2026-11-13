@@ -173,6 +173,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     session_id: int | None = None    # None = start a new session
+    material_id: int | None = None   # "only search this document" — None = all materials
     message: str = Field(min_length=1, max_length=4000)
     note_id: int | None = None       # optional — link chat to a specific note
 
@@ -208,6 +209,7 @@ class AudioTranscriptResponse(BaseModel):
     message: str
 
 class VideoAnalysisResponse(BaseModel):
+    material_id: int | None = None
     filename: str
     transcript: str
     frame_descriptions: list[str]
@@ -495,3 +497,31 @@ class MapSourceMaterial(BaseModel):
 class MapSources(BaseModel):
     notes: list[MapSourceNote]
     materials: list[MapSourceMaterial]
+
+
+# ── Tutor chat history ────────────────────────────────────────────────────────
+class ChatSessionSummary(BaseModel):
+    session_id: int
+    title: str
+    preview: str                     # start of the last message
+    match: str | None = None         # where the search term was found (when searching)
+    message_count: int
+    note_id: int | None
+    material_id: int | None
+    started_at: datetime | None
+    updated_at: datetime | None
+
+class ChatSessionDetail(BaseModel):
+    session_id: int
+    title: str
+    messages: list[ChatMessage]
+    note_id: int | None
+    note_title: str | None
+    material_id: int | None          # the document the chat is focused on
+    material_filename: str | None
+    material_type: str | None
+    started_at: datetime | None
+    updated_at: datetime | None
+
+class ChatSessionRename(BaseModel):
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
