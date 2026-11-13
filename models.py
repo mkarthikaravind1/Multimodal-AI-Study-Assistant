@@ -55,6 +55,7 @@ class QuizDetail(Base):
     score_percentage = Column(DECIMAL(5, 2), nullable=False)
     attempted_at = Column(DateTime, default=utcnow)
     submitted_at = Column(DateTime, nullable=True)   # NULL = generated but not submitted yet
+    difficulty = Column(String(10), nullable=True)   # easy | medium | hard | mixed (NULL = older quiz)
     user_answers = Column(JSON, nullable=True)       # {question: answer} saved on submit
     # Self-healing loop: a retest quiz points at the quiz it is fixing
     parent_quiz_id = Column(Integer, ForeignKey("quiz_details.quiz_id"), nullable=True)

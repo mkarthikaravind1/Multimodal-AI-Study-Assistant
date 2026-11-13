@@ -13,11 +13,13 @@ from database import get_db, utcnow, as_utc
 from models import Note, QuizDetail, User
 from schemas import (
     RemediateRequest, RemediationResponse, LessonLite, QuizResponse,
-    MCQQuestionPublic, TopicProgress, Attempt,
+    TopicProgress, Attempt,
 )
 from Routers.lessons import save_note_and_index, youtube_search_links
 from Services.lesson_generator import generate_remediation_notes
 from Services.quiz_generator import generate_quiz, QuizGenerationError
+from Services.answer_check import qtype
+from Routers.quiz import to_public
 from Services.learning_loop import (
     PASS_MARK, MAX_LOOP_ROUNDS, loop_round, find_mistakes, topic_status,
     recent_average, submitted_quizzes_by_topic,
@@ -30,8 +32,9 @@ def _quiz_response(quiz: QuizDetail) -> QuizResponse:
     return QuizResponse(
         quiz_id=cast(int, quiz.quiz_id),
         topic=cast(str, quiz.topic),
-        questions=[MCQQuestionPublic(question=q["question"], options=q["options"]) for q in quiz.questions],  # type: ignore
+        questions=[to_public(q) for q in quiz.questions],  # type: ignore
         total_questions=cast(int, quiz.total_questions),
+        difficulty=cast(str, quiz.difficulty) or "medium",
         message="Retest ready",
     )
 
@@ -89,7 +92,14 @@ def remediate(request: RemediateRequest, db: Session = Depends(get_db), current_
     # Generate BOTH before saving anything, so a failure leaves no half-finished loop
     content = generate_remediation_notes(topic, student_class, mistakes)
     try:
-        questions = generate_quiz(content, topic, focus=[m["question"] for m in mistakes])
+        # Retest in the same format as the original: same question types, difficulty and length
+        questions = generate_quiz(
+            content, topic,
+            focus=[m["question"] for m in mistakes],
+            question_types=list(dict.fromkeys(qtype(q) for q in quiz.questions)),   # type: ignore
+            difficulty=cast(str, quiz.difficulty) or "medium",
+            count=max(3, min(10, cast(int, quiz.total_questions))),
+        )
     except QuizGenerationError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
@@ -109,6 +119,7 @@ def remediate(request: RemediateRequest, db: Session = Depends(get_db), current_
         score_percentage=0.00,
         attempted_at=utcnow(),
         submitted_at=None,
+        difficulty=quiz.difficulty,
         user_id=current_user.user_id,
         note_id=note.note_id,
         parent_quiz_id=quiz.quiz_id,

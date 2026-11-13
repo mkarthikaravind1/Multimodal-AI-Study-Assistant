@@ -5,6 +5,105 @@ import MarkdownContent from "../components/MarkdownContent";
 import Spinner from "../components/Spinner";
 import usePageTitle from "../hooks/usePageTitle";
 
+// ── question types & difficulty ──────────────────────────────────────────────
+const QUESTION_TYPES = [
+  { key: "mcq", label: "Multiple choice", short: "MCQ" },
+  { key: "true_false", label: "True / False", short: "True/False" },
+  { key: "fill_blank", label: "Fill in the blank", short: "Fill-in" },
+  { key: "numerical", label: "Numerical", short: "Numerical" },
+];
+const TYPE_SHORT = Object.fromEntries(QUESTION_TYPES.map((t) => [t.key, t.short]));
+
+const DIFFICULTIES = [
+  { key: "easy", label: "Easy", hint: "Recall key facts" },
+  { key: "medium", label: "Medium", hint: "Understand & apply" },
+  { key: "hard", label: "Hard", hint: "Reason it through" },
+  { key: "mixed", label: "Mixed", hint: "Easy → hard" },
+];
+const DIFFICULTY_COLORS = {
+  easy: { bg: "#DCFCE7", fg: "#15803D" },
+  medium: { bg: "#FEF9C3", fg: "#854D0E" },
+  hard: { bg: "#FEE2E2", fg: "#B91C1C" },
+  mixed: { bg: "#EEF2FF", fg: "#4338CA" },
+};
+
+function QuestionBadges({ type, difficulty }) {
+  const d = DIFFICULTY_COLORS[difficulty];
+  return (
+    <span className="inline-flex items-center gap-1.5 flex-wrap">
+      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+        {TYPE_SHORT[type] ?? "MCQ"}
+      </span>
+      {d && (
+        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full capitalize" style={{ background: d.bg, color: d.fg }}>
+          {difficulty}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function ChoiceButton({ selected, onClick, children, className = "" }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`text-left px-4 py-3 rounded-xl text-sm border transition-all duration-150 ${className}`}
+      style={{
+        borderColor: selected ? "#4F46E5" : "#E5E7EB",
+        background: selected ? "#EEF2FF" : "#fff",
+        color: selected ? "#4338CA" : "#374151",
+        fontWeight: selected ? 500 : 400,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// One input per question type
+function AnswerInput({ q, value, onChange }) {
+  if (q.type === "fill_blank" || q.type === "numerical") {
+    const numerical = q.type === "numerical";
+    return (
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          inputMode={numerical ? "decimal" : "text"}
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          maxLength={200}
+          placeholder={numerical ? "Enter a number, e.g. 9.81 or 1.5e-3" : "Type the missing word(s)"}
+          className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-800 placeholder-gray-300
+                     focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+        {numerical && q.unit && <span className="text-sm text-gray-500 flex-shrink-0">{q.unit}</span>}
+      </div>
+    );
+  }
+  if (q.type === "true_false") {
+    return (
+      <div className="grid grid-cols-2 gap-2">
+        {["True", "False"].map((opt) => (
+          <ChoiceButton key={opt} selected={value === opt} onClick={() => onChange(opt)} className="text-center">
+            {opt === "True" ? "✓ True" : "✗ False"}
+          </ChoiceButton>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {q.options.map((opt, optIdx) => (
+        <ChoiceButton key={optIdx} selected={value === opt} onClick={() => onChange(opt)}>
+          {opt}
+        </ChoiceButton>
+      ))}
+    </div>
+  );
+}
+
 // ── PHASE 1: Setup form ───────────────────────────────────────────────────────
 function SetupPhase({ onQuizGenerated }) {
   const [lessons, setLessons] = useState([]);
@@ -13,6 +112,17 @@ function SetupPhase({ onQuizGenerated }) {
   const [topic, setTopic] = useState("");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [difficulty, setDifficulty] = useState("medium");
+  const [types, setTypes] = useState(["mcq", "true_false", "fill_blank"]);
+  const [count, setCount] = useState(5);
+
+  function toggleType(key) {
+    setTypes((prev) =>
+      prev.includes(key)
+        ? prev.length > 1 ? prev.filter((t) => t !== key) : prev   // keep at least one
+        : [...prev, key]
+    );
+  }
 
   useEffect(() => {
     async function fetchLessons() {
@@ -47,6 +157,9 @@ function SetupPhase({ onQuizGenerated }) {
       const res = await api.post("/quiz/generate", {
         note_id: parseInt(selectedNote),
         topic: topic.trim(),
+        question_types: types,
+        difficulty,
+        count,
       });
       onQuizGenerated(res.data);
     } catch (err) {
@@ -64,7 +177,9 @@ function SetupPhase({ onQuizGenerated }) {
             style={{ background: "#EEF2FF" }}>✏️</span>
           <div>
             <h2 className="text-base font-semibold text-gray-800">Generate a quiz</h2>
-            <p className="text-xs text-gray-400 mt-0.5">5 MCQs generated from your lesson notes</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Questions from your lesson notes — every answer comes with an explanation
+            </p>
           </div>
         </div>
 
@@ -123,6 +238,83 @@ function SetupPhase({ onQuizGenerated }) {
             </p>
           </div>
 
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Difficulty</label>
+            <div className="grid grid-cols-4 gap-1.5">
+              {DIFFICULTIES.map((d) => (
+                <button
+                  key={d.key}
+                  type="button"
+                  onClick={() => setDifficulty(d.key)}
+                  disabled={generating}
+                  title={d.hint}
+                  aria-pressed={difficulty === d.key}
+                  className="py-2 rounded-lg text-xs font-medium border"
+                  style={{
+                    background: difficulty === d.key ? DIFFICULTY_COLORS[d.key].bg : "#fff",
+                    borderColor: difficulty === d.key ? DIFFICULTY_COLORS[d.key].fg : "#E5E7EB",
+                    color: difficulty === d.key ? DIFFICULTY_COLORS[d.key].fg : "#374151",
+                  }}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-1">{DIFFICULTIES.find((d) => d.key === difficulty).hint}</p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Question types</label>
+            <div className="flex flex-wrap gap-1.5">
+              {QUESTION_TYPES.map((t) => {
+                const on = types.includes(t.key);
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => toggleType(t.key)}
+                    disabled={generating}
+                    aria-pressed={on}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium border"
+                    style={{
+                      background: on ? "#EEF2FF" : "#fff",
+                      borderColor: on ? "#4F46E5" : "#E5E7EB",
+                      color: on ? "#4338CA" : "#6B7280",
+                    }}
+                  >
+                    {on ? "✓ " : ""}{t.label}
+                  </button>
+                );
+              })}
+            </div>
+            {types.includes("numerical") && (
+              <p className="text-xs text-gray-400 mt-1">Numerical questions need a lesson with something to calculate.</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Number of questions</label>
+            <div className="flex gap-1.5">
+              {[5, 8, 10].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setCount(n)}
+                  disabled={generating}
+                  aria-pressed={count === n}
+                  className="w-12 py-1.5 rounded-lg text-xs font-medium border"
+                  style={{
+                    background: count === n ? "#EEF2FF" : "#fff",
+                    borderColor: count === n ? "#4F46E5" : "#E5E7EB",
+                    color: count === n ? "#4338CA" : "#374151",
+                  }}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <button
             type="submit"
             disabled={generating || lessons.length === 0}
@@ -134,7 +326,7 @@ function SetupPhase({ onQuizGenerated }) {
           </button>
           {generating && (
             <p className="text-xs text-center text-gray-400">
-              Generating 5 questions — this takes a few seconds.
+              Writing {count} questions with explanations — this takes 10–20 seconds.
             </p>
           )}
         </form>
@@ -148,14 +340,16 @@ function QuizPhase({ quiz, onSubmit, submitting }) {
   const [answers, setAnswers] = useState({}); // { questionIndex: selectedOption } — index, so duplicate text can't collide
   const [error, setError] = useState("");
 
-  const allAnswered = quiz.questions.every((_, idx) => answers[idx] !== undefined);
+  const isAnswered = (idx) => String(answers[idx] ?? "").trim() !== "";
+  const answeredCount = quiz.questions.filter((_, idx) => isAnswered(idx)).length;
+  const allAnswered = answeredCount === quiz.questions.length;
 
   function handleSubmit() {
     if (!allAnswered) { setError("Please answer all questions before submitting."); return; }
     setError("");
     const payload = quiz.questions.map((q, idx) => ({
       question: q.question,
-      user_answer: answers[idx],
+      user_answer: String(answers[idx]).trim(),
     }));
     onSubmit(payload);
   }
@@ -166,42 +360,31 @@ function QuizPhase({ quiz, onSubmit, submitting }) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-gray-800">{quiz.topic}</h2>
-          <p className="text-xs text-gray-400 mt-0.5">{quiz.total_questions} questions</p>
+          <p className="text-xs text-gray-400 mt-0.5 capitalize">
+            {quiz.total_questions} questions · {quiz.difficulty ?? "medium"}
+          </p>
         </div>
         <span className="text-xs font-medium px-3 py-1.5 rounded-full"
           style={{ background: "#EEF2FF", color: "#4F46E5" }}>
-          {Object.keys(answers).length} / {quiz.total_questions} answered
+          {answeredCount} / {quiz.total_questions} answered
         </span>
       </div>
 
       {/* questions */}
       {quiz.questions.map((q, idx) => (
         <div key={idx} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <p className="text-sm font-semibold text-gray-800 mb-4">
-            <span className="text-indigo-500 mr-2">Q{idx + 1}.</span>
-            {q.question}
-          </p>
-          <div className="flex flex-col gap-2">
-            {q.options.map((opt, optIdx) => {
-              const selected = answers[idx] === opt;
-              return (
-                <button
-                  key={optIdx}
-                  type="button"
-                  onClick={() => setAnswers((prev) => ({ ...prev, [idx]: opt }))}
-                  className="text-left px-4 py-3 rounded-xl text-sm border transition-all duration-150"
-                  style={{
-                    borderColor: selected ? "#4F46E5" : "#E5E7EB",
-                    background: selected ? "#EEF2FF" : "#fff",
-                    color: selected ? "#4338CA" : "#374151",
-                    fontWeight: selected ? 500 : 400,
-                  }}
-                >
-                  {opt}
-                </button>
-              );
-            })}
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <p className="text-sm font-semibold text-gray-800">
+              <span className="text-indigo-500 mr-2">Q{idx + 1}.</span>
+              {q.question}
+            </p>
+            <QuestionBadges type={q.type} difficulty={q.difficulty} />
           </div>
+          <AnswerInput
+            q={q}
+            value={answers[idx]}
+            onChange={(v) => setAnswers((prev) => ({ ...prev, [idx]: v }))}
+          />
         </div>
       ))}
 
@@ -367,21 +550,39 @@ function ResultsPhase({ result, onRetry, onRemediate, remediating, loopError }) 
                 {r.is_correct ? "✓" : "✗"}
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800 mb-2">{r.question}</p>
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <p className="text-sm font-medium text-gray-800">{r.question}</p>
+                  <QuestionBadges type={r.type} difficulty={r.difficulty} />
+                </div>
                 <p className="text-xs text-gray-500">
                   Your answer:{" "}
                   <span
                     className="font-medium"
                     style={{ color: r.is_correct ? "#16A34A" : "#DC2626" }}
                   >
-                    {r.user_answer}
+                    {r.user_answer}{r.unit ? ` ${r.unit}` : ""}
                   </span>
                 </p>
+                {r.note && <p className="text-xs text-green-700 mt-0.5">✓ {r.note}</p>}
                 {!r.is_correct && (
                   <p className="text-xs text-gray-500 mt-0.5">
                     Correct answer:{" "}
-                    <span className="font-medium text-green-600">{r.correct_answer}</span>
+                    <span className="font-medium text-green-600">
+                      {r.correct_answer}{r.unit ? ` ${r.unit}` : ""}
+                    </span>
                   </p>
+                )}
+                {!r.is_correct && r.why_wrong && (
+                  <div className="mt-2 rounded-lg px-3 py-2 text-xs" style={{ background: "#FEF2F2", color: "#991B1B" }}>
+                    <span className="font-semibold">Why “{r.user_answer}” is wrong: </span>
+                    {r.why_wrong}
+                  </div>
+                )}
+                {r.explanation && (
+                  <div className="mt-2 rounded-lg px-3 py-2 text-xs" style={{ background: "#F0FDF4", color: "#166534" }}>
+                    <span className="font-semibold">{r.is_correct ? "Why it's right: " : "Explanation: "}</span>
+                    {r.explanation}
+                  </div>
                 )}
               </div>
             </div>

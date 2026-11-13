@@ -1,7 +1,7 @@
 #schemas.py
 from datetime import datetime
 from typing import Annotated, Literal
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 # Reusable constrained string types — whitespace is stripped first,
 # so "   " counts as empty and is rejected.
@@ -36,28 +36,40 @@ class MeResponse(BaseModel):
     role: str
     student_class: str | None     # last education level the student used
 
-# Single MCQ shape
-class MCQQuestion(BaseModel):
-    question: str
-    options: list[str]        # always 4 items
-    correct_answer: str       # exact text of the correct option
+QuestionType = Literal["mcq", "true_false", "fill_blank", "numerical"]
+Difficulty = Literal["easy", "medium", "hard", "mixed"]
 
-# What the student sees — no correct_answer, so the key can't be read in DevTools
-class MCQQuestionPublic(BaseModel):
+# What the student sees — never the answer or explanations, so the key can't be read in DevTools
+class QuestionPublic(BaseModel):
     question: str
-    options: list[str]
+    type: QuestionType = "mcq"
+    options: list[str] = []          # mcq: 4 · true_false: ["True", "False"] · typed answers: []
+    difficulty: str | None = None    # easy | medium | hard
+    unit: str | None = None          # numerical answers, e.g. "m/s"
 
 # Request — what frontend sends
 class QuizRequest(BaseModel):
     note_id: int
     topic: Topic
+    question_types: list[QuestionType] = Field(
+        default=["mcq", "true_false", "fill_blank"], min_length=1, max_length=4
+    )
+    difficulty: Difficulty = "medium"
+    count: int = Field(default=5, ge=3, le=10)
+
+    @field_validator("question_types", mode="before")
+    @classmethod
+    def _dedupe_types(cls, value):
+        # ["mcq", "mcq", "true_false"] → ["mcq", "true_false"] (before the max-4 length check)
+        return list(dict.fromkeys(value)) if isinstance(value, list) else value
 
 # Response — what frontend gets back
 class QuizResponse(BaseModel):
     quiz_id: int
     topic: str
-    questions: list[MCQQuestionPublic]
+    questions: list[QuestionPublic]
     total_questions: int
+    difficulty: str = "medium"
     message: str 
 
 # One answer the student submits
@@ -70,12 +82,18 @@ class QuizSubmitRequest(BaseModel):
     quiz_id: int
     answers: list[SubmittedAnswer] = Field(max_length=20)
 
-# Per question result — was it right or wrong?
+# Per question result — was it right or wrong, and why?
 class QuestionResult(BaseModel):
     question: str
     user_answer: str
     correct_answer: str
     is_correct: bool
+    type: str = "mcq"
+    difficulty: str | None = None
+    unit: str | None = None
+    explanation: str | None = None   # why the correct answer is correct
+    why_wrong: str | None = None     # why the option YOU picked is wrong (mcq / true-false)
+    note: str | None = None          # e.g. "Accepted — small spelling difference"
 
 # Full evaluation response
 class QuizSubmitResponse(BaseModel):

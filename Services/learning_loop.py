@@ -12,6 +12,7 @@ all-time average, so recovering from a weak start actually shows up.
 from sqlalchemy.orm import Session
 
 from models import QuizDetail
+from Services.answer_check import check_answer
 
 PASS_MARK = 70.0
 RECENT_ATTEMPTS = 3
@@ -43,7 +44,7 @@ def find_mistakes(quiz: QuizDetail) -> list[dict]:
     mistakes = []
     for q in quiz.questions:                      # type: ignore
         given = answers.get(q["question"]) if answers else None
-        if answers is None or (given or "").strip() != q["correct_answer"].strip():
+        if answers is None or not check_answer(q, given)[0]:
             mistakes.append({
                 "question": q["question"],
                 "user_answer": given,

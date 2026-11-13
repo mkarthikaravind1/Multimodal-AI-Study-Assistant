@@ -31,6 +31,10 @@ An AI-powered learning platform that helps students learn better by generating q
   the questions you missed (including *why* your answer was wrong), then a fresh retest on the same concepts.
   Repeat until you pass (max 5 rounds). Analytics shows each topic's score history and status:
   *Needs work → In recovery → Recovered ✓*. Mastery uses your **last 3 attempts**, so recovery counts.
+- **Smarter quizzes** — multiple choice, true/false, fill-in-the-blank and numerical questions at Easy / Medium /
+  Hard / Mixed difficulty. Every answer is explained, and for a wrong multiple-choice pick you see *why that option*
+  is wrong. Typed answers are marked fairly: small typos and synonyms are accepted for fill-ins, numbers within a
+  tolerance (units, commas, `1.5e-3`, `1/4` all understood).
 - **Spaced-repetition flashcards (SM-2)** — cards made by AI from any lesson, plus every wrong quiz answer and
   weak viva answer turned into a card automatically. A daily review queue (Again / Hard / Good / Easy, with keyboard
   shortcuts) schedules each card right before you'd forget it. One-click export to Anki.
@@ -281,7 +285,7 @@ The platform has two independent content pipelines that converge at a single ret
 | POST | `/lessons/generate/stream` | Same, streamed live as Server-Sent Events |
 | GET | `/lessons/all` | Get all lessons for the user |
 | POST | `/lessons/regenerate-weak` | Simplify notes for a weak topic |
-| POST | `/quiz/generate` | Generate a quiz from a lesson |
+| POST | `/quiz/generate` | Generate a quiz from a lesson (question types, difficulty, length) |
 | POST | `/quiz/submit` | Submit answers and get scored results |
 | GET | `/analytics` | User's quiz analytics (weak/strong topics) |
 | POST | `/chat` | AI Tutor chat (RAG-based, returns clickable citations) |
