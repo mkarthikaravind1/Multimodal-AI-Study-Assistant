@@ -16,6 +16,7 @@ from Routers.learning import router as learning_router
 from Routers.viva import router as viva_router
 from Routers.flashcards import router as flashcards_router
 from Routers.solutions import router as solutions_router
+from Routers.planner import router as planner_router
 
 load_dotenv()
 
@@ -70,3 +71,4 @@ app.include_router(learning_router)
 app.include_router(viva_router)
 app.include_router(flashcards_router)
 app.include_router(solutions_router)
+app.include_router(planner_router)

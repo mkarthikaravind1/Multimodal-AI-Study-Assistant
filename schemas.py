@@ -1,5 +1,5 @@
 #schemas.py
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Literal
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 
@@ -357,3 +357,83 @@ class SolutionRecheckRequest(BaseModel):
     steps: list[SolutionStepText] = Field(min_length=1, max_length=40)
     problem: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None = None
     final_answer: Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)] | None = None
+
+
+# ── Exam planner ──────────────────────────────────────────────────────────────
+PlanTopicName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=120)]
+
+class PlanTopicIn(BaseModel):
+    unit: Annotated[str, StringConstraints(strip_whitespace=True, max_length=120)] = ""
+    topic: PlanTopicName
+    size: int = Field(default=2, ge=1, le=3)       # 1 small · 2 medium · 3 large
+
+class PlanTopicOut(BaseModel):
+    unit: str
+    topic: str
+    size: int
+    score: float | None              # recent quiz/viva score on a matching topic
+    matched_topic: str | None        # the history topic it was matched with
+    status: Literal["weak", "ok", "strong", "new"]
+    weight: float                    # time multiplier (weak topics get more)
+    minutes: int = 0                 # learning time planned (0 before a plan exists)
+
+class SyllabusExtractResponse(BaseModel):
+    exam_name: str
+    topics: list[PlanTopicOut]
+    syllabus_filename: str | None
+
+class PlanCreate(BaseModel):
+    exam_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    exam_date: date
+    start_date: date                 # the student's "today" (their local date)
+    minutes_per_day: int = Field(default=120, ge=30, le=720)
+    rest_days: list[Annotated[int, Field(ge=0, le=6)]] = Field(default=[], max_length=6)
+    topics: list[PlanTopicIn] = Field(min_length=1, max_length=40)
+    syllabus_filename: Annotated[str, StringConstraints(max_length=255)] | None = None
+
+class PlanItem(BaseModel):
+    id: str
+    topic: str
+    kind: Literal["learn", "practice", "review", "revise", "quiz", "mock"]
+    minutes: int
+    done: bool
+
+class PlanDay(BaseModel):
+    date: date
+    rest: bool
+    exam: bool
+    items: list[PlanItem]
+
+class PlanProgress(BaseModel):
+    done_minutes: int
+    total_minutes: int
+    done_items: int
+    total_items: int
+
+class PlanOut(BaseModel):
+    plan_id: int
+    exam_name: str
+    exam_date: date
+    start_date: date
+    minutes_per_day: int
+    rest_days: list[int]
+    topics: list[PlanTopicOut]
+    days: list[PlanDay]
+    syllabus_filename: str | None
+    progress: PlanProgress
+    created_at: datetime | None
+    updated_at: datetime | None
+
+class PlanSummary(BaseModel):
+    plan_id: int
+    exam_name: str
+    exam_date: date
+    topics: int
+    progress: PlanProgress
+    created_at: datetime | None
+
+class PlanItemUpdate(BaseModel):
+    done: bool
+
+class ReplanRequest(BaseModel):
+    today: date                      # the student's local date

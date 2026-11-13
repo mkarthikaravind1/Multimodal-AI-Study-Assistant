@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, DateTime,
+    Column, Integer, String, DateTime, Date,
     Text, JSON, DECIMAL, ForeignKey, Enum
 )
 from sqlalchemy.orm import relationship
@@ -154,3 +154,23 @@ class SolutionCheck(Base):
     rechecks        = Column(Integer, nullable=False, default=0)
     created_at      = Column(DateTime, default=utcnow)
     updated_at      = Column(DateTime, nullable=True)
+
+
+class ExamPlan(Base):
+    """A day-by-day study plan from a syllabus to an exam date (see Services/study_planner.py)."""
+    __tablename__ = "exam_plans"
+
+    plan_id           = Column(Integer, primary_key=True, index=True)
+    user_id           = Column(Integer, ForeignKey("user_details.user_id"), nullable=False, index=True)
+    exam_name         = Column(String(200), nullable=False)
+    exam_date         = Column(Date, nullable=False)
+    start_date        = Column(Date, nullable=False)
+    minutes_per_day   = Column(Integer, nullable=False)
+    rest_days         = Column(JSON, nullable=False)       # weekdays off, 0 = Monday … 6 = Sunday
+    # [{unit, topic, size, score, matched_topic, status, weight, minutes}]
+    topics            = Column(JSON, nullable=False)
+    # [{date, rest, exam, items: [{id, topic, kind, minutes, done}]}]
+    days              = Column(JSON, nullable=False)
+    syllabus_filename = Column(String(255), nullable=True)
+    created_at        = Column(DateTime, default=utcnow)
+    updated_at        = Column(DateTime, nullable=True)

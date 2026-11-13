@@ -104,7 +104,9 @@ function LessonCard({ lesson, isOpen, onToggle, highlight }) {
 export default function Lesson() {
   usePageTitle("Lessons");
   // ── form state ──────────────────────────────────────────────────────────────
-  const [topic, setTopic] = useState("");
+  const location = useLocation();
+  // the exam planner's "Make a lesson" button pre-fills the topic
+  const [topic, setTopic] = useState(() => location.state?.topic ?? "");
   const [studentClass, setStudentClass] = useState("");
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState(null);   // notes being streamed in (null = not generating)
@@ -118,7 +120,6 @@ export default function Lesson() {
   const [lessons, setLessons] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
   // which card is expanded — a citation link can ask for a specific lesson
-  const location = useLocation();
   const [openId, setOpenId] = useState(() => location.state?.openNoteId ?? null);
 
   // ── load all existing lessons on mount ─────────────────────────────────────

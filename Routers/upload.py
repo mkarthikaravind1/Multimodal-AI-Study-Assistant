@@ -71,6 +71,42 @@ def read_upload(file: UploadFile, max_bytes: int, label: str) -> bytes:
     return data
 
 
+def extract_pdf_pages(file_bytes: bytes) -> list[str]:
+    """
+    Text of every page (index 0 = page 1), with an OCR fallback for scanned
+    PDFs. Raises HTTPException with a readable message if nothing can be read.
+    Shared by PDF uploads and the exam planner's syllabus upload.
+    """
+    try:
+        pdf_reader = PdfReader(io.BytesIO(file_bytes))
+        page_texts = [page.extract_text() or "" for page in pdf_reader.pages]
+    except PdfReadError:
+        raise HTTPException(status_code=400, detail="This file is not a valid PDF or is corrupted.")
+
+    # OCR fallback for scanned / image-only PDFs
+    if not "".join(page_texts).strip():
+        try:
+            images = convert_from_bytes(file_bytes)
+        except PDFInfoNotInstalledError:
+            raise HTTPException(
+                status_code=500,
+                detail="This PDF has no text layer and OCR is unavailable: Poppler is not installed on the server."
+            )
+
+        reader = get_ocr_reader()
+        page_texts = [
+            " ".join(cast(list[str], reader.readtext(np.array(image), detail=0)))
+            for image in images
+        ]
+
+    if not "".join(page_texts).strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Could not extract any text from this PDF."
+        )
+    return page_texts
+
+
 def save_material_and_index(
     db: Session,
     user_id: int,
@@ -147,33 +183,7 @@ def upload_pdf(file: UploadFile = File(...),db: Session = Depends(get_db),curren
     file_bytes = read_upload(file, MAX_PDF_BYTES, "PDF")
 
     # Step 3 — Extract text page by page (page numbers are kept for citations)
-    try:
-        pdf_reader = PdfReader(io.BytesIO(file_bytes))
-        page_texts = [page.extract_text() or "" for page in pdf_reader.pages]
-    except PdfReadError:
-        raise HTTPException(status_code=400, detail="This file is not a valid PDF or is corrupted.")
-
-    # OCR fallback for scanned / image-only PDFs
-    if not "".join(page_texts).strip():
-        try:
-            images = convert_from_bytes(file_bytes)
-        except PDFInfoNotInstalledError:
-            raise HTTPException(
-                status_code=500,
-                detail="This PDF has no text layer and OCR is unavailable: Poppler is not installed on the server."
-            )
-
-        reader = get_ocr_reader()
-        page_texts = [
-            " ".join(cast(list[str], reader.readtext(np.array(image), detail=0)))
-            for image in images
-        ]
-
-    if not "".join(page_texts).strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Could not extract any text from this PDF."
-        )
+    page_texts = extract_pdf_pages(file_bytes)
 
     # Step 4 — Chunk each page separately so every chunk knows its page number
     chunks: list[str] = []

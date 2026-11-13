@@ -38,6 +38,12 @@ An AI-powered learning platform that helps students learn better by generating q
 - **Spaced-repetition flashcards (SM-2)** — cards made by AI from any lesson, plus every wrong quiz answer and
   weak viva answer turned into a card automatically. A daily review queue (Again / Hard / Good / Easy, with keyboard
   shortcuts) schedules each card right before you'd forget it. One-click export to Anki.
+- **Exam planner** — upload your syllabus PDF (or paste it) and pick the exam date, daily study time and days off.
+  The AI pulls out the topics (you can rename, resize or remove them), and they are matched against your quiz and viva
+  results: weak topics get up to twice the time, strong ones less. The day-by-day plan itself is built by plain code —
+  topics in syllabus order, spaced reviews 1/3/7/21 days later, a revision phase that starts with your weakest topics,
+  and a mock test the day before the exam. Tick sessions off as you go; fell behind? **Re-plan from today** keeps what
+  you've done and spreads the rest. Export to Google / Outlook / Apple Calendar as an `.ics` file.
 - **Tamil / Hindi / English-mixed replies** — pick English, Hindi, Tamil, Hinglish, Tanglish or **Auto** from the
   🌐 menu in the navbar (saved to your profile). It applies to the tutor, lessons, fix-up notes, quiz explanations and
   the viva. *Auto* answers in the language you asked in: script detection plus common romanised Hindi/Tamil words,
@@ -317,6 +323,11 @@ The platform has two independent content pipelines that converge at a single ret
 | POST | `/solutions/{id}/recheck` | Re-mark with a corrected transcription |
 | POST | `/solutions/{id}/flashcard` | Save the first mistake as a flashcard |
 | GET | `/solutions/history` | Past solution checks (`GET` / `DELETE /solutions/{id}`, `GET /solutions/{id}/image`) |
+| POST | `/planner/extract` | Syllabus PDF / text → topics, flagged weak / strong from your results |
+| POST | `/planner/plans` | Create a day-by-day plan (`GET` list, `GET` / `DELETE /planner/plans/{id}`) |
+| PATCH | `/planner/plans/{id}/items/{item}` | Tick a study session done |
+| POST | `/planner/plans/{id}/replan` | Rebuild the rest of the plan from today |
+| GET | `/planner/plans/{id}/ics` | Calendar file (`?start_time=18:00`) |
 | GET | `/admin/users` | List all users *(admin only)* |
 | GET | `/admin/stats` | Platform usage stats *(admin only)* |
 
