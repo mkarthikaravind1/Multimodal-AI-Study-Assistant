@@ -189,3 +189,21 @@ def add_pdf_chunks_to_vectorstore(
     )
 
     return len(chunks)
+
+
+def get_material_text(material_id: int, user_id: int, source: str, max_chars: int = 12000) -> str:
+    """
+    The stored text of one uploaded PDF / video, in chunk order — except that a
+    video's overall summary (the chunks without a timestamp) comes first, so a
+    long video's summary isn't cut off by max_chars.
+    Used for concept maps. Returns "" if nothing is stored.
+    """
+    result = notes_collection.get(
+        where={"$and": [{"material_id": material_id}, {"source": source}, {"user_id": user_id}]},
+        include=["documents", "metadatas"],
+    )
+    docs = result.get("documents") or []
+    metas = result.get("metadatas") or [{}] * len(docs)
+    ordered = [d for _, d in sorted(zip(metas, docs), key=lambda p: ("start_sec" in (p[0] or {}), int((p[0] or {}).get("chunk_index", 0))))]
+    text = "\n".join(ordered)
+    return text[:max_chars]

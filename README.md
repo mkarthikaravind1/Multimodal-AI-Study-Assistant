@@ -38,6 +38,12 @@ An AI-powered learning platform that helps students learn better by generating q
 - **Spaced-repetition flashcards (SM-2)** — cards made by AI from any lesson, plus every wrong quiz answer and
   weak viva answer turned into a card automatically. A daily review queue (Again / Hard / Good / Easy, with keyboard
   shortcuts) schedules each card right before you'd forget it. One-click export to Anki.
+- **Concept maps & mind maps** — one click on a lesson (or pick any uploaded PDF or video) and the AI pulls out the key
+  ideas and how they connect. View it as a **mind map** or a **concept map** with labelled links and cross-connections,
+  zoom, download as SVG or print it. The model only returns a small validated graph; the Mermaid diagram is built from it
+  in the browser (Mermaid is loaded only on this page). Maps are saved, so re-opening is instant.
+- **Save lessons as PDF** — every lesson has a clean printable view (no navbar or buttons, links printed as URLs);
+  the browser's "Save as PDF" does the rest, no server-side PDF library.
 - **Exam planner** — upload your syllabus PDF (or paste it) and pick the exam date, daily study time and days off.
   The AI pulls out the topics (you can rename, resize or remove them), and they are matched against your quiz and viva
   results: weak topics get up to twice the time, strong ones less. The day-by-day plan itself is built by plain code —
@@ -98,7 +104,8 @@ MULTIMODAL AI ASSISTANT/
 │   │   ├── api/            axios instance + error helper
 │   │   ├── components/     Navbar, route guards, Spinner, Markdown renderer
 │   │   ├── context/        auth state (AuthContext.jsx, useAuth.js)
-│   │   ├── hooks/          usePageTitle
+│   │   ├── hooks/          usePageTitle, useSpeech, useVoiceRecorder
+│   │   ├── lib/            mermaidGraph.js (concept-map graph → Mermaid code)
 │   │   ├── pages/          one file per page
 │   │   ├── App.jsx
 │   │   ├── main.jsx
@@ -323,6 +330,10 @@ The platform has two independent content pipelines that converge at a single ret
 | POST | `/solutions/{id}/recheck` | Re-mark with a corrected transcription |
 | POST | `/solutions/{id}/flashcard` | Save the first mistake as a flashcard |
 | GET | `/solutions/history` | Past solution checks (`GET` / `DELETE /solutions/{id}`, `GET /solutions/{id}/image`) |
+| GET | `/lessons/{id}` | One lesson (printable view) |
+| GET | `/maps/sources` | Lessons, PDFs and videos you can map |
+| POST | `/maps` | Make (or open the saved) concept map; `regenerate: true` for a fresh one |
+| GET | `/maps` | Your maps (`GET` / `DELETE /maps/{id}`) |
 | POST | `/planner/extract` | Syllabus PDF / text → topics, flagged weak / strong from your results |
 | POST | `/planner/plans` | Create a day-by-day plan (`GET` list, `GET` / `DELETE /planner/plans/{id}`) |
 | PATCH | `/planner/plans/{id}/items/{item}` | Tick a study session done |

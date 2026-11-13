@@ -83,6 +83,21 @@ function LessonCard({ lesson, isOpen, onToggle, highlight }) {
             >
               🃏 Make flashcards
             </button>
+            <button
+              type="button"
+              onClick={() => navigate("/maps", { state: { sourceType: "note", sourceId: lesson.note_id } })}
+              className="px-3 py-1.5 rounded-xl text-xs font-medium border border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+            >
+              🧠 Mind map
+            </button>
+            <a
+              href={`/print/lesson/${lesson.note_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 rounded-xl text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
+            >
+              🖨 Save as PDF
+            </a>
             {links.map((url, i) => (
               <a
                 key={url}

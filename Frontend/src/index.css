@@ -1,1 +1,58 @@
 @import "tailwindcss";
+
+/* Mermaid sets a fixed max-width on its SVG — let the zoom wrapper control the size instead */
+.mermaid-host svg {
+  width: 100% !important;
+  max-width: none !important;
+  height: auto;
+}
+
+/* ── Printing / "Save as PDF" ───────────────────────────────────────────────
+   Anything marked .no-print (navbar, buttons, side panels) is left out.
+   Used by the printable lesson view and the concept-map page. */
+@media print {
+  @page {
+    margin: 16mm 14mm;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  /* cards print flat — no shadows or tinted page backgrounds */
+  .print-flat,
+  .print-flat * {
+    box-shadow: none !important;
+  }
+  .print-flat {
+    border: none !important;
+    background: #fff !important;
+    padding: 0 !important;
+  }
+
+  h1, h2, h3 {
+    break-after: avoid;
+  }
+  li, p, figure, .mermaid-host {
+    break-inside: avoid;
+  }
+
+  /* links: show where they go, since you can't click paper */
+  a.print-url[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 9pt;
+    color: #6B7280;
+    word-break: break-all;
+  }
+
+  /* keep colours (map branches, chips) instead of printing them grey */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

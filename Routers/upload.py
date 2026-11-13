@@ -15,7 +15,7 @@ from pdf2image import convert_from_bytes
 from pdf2image.exceptions import PDFInfoNotInstalledError
 
 from database import get_db, utcnow, as_utc
-from models import UploadedMaterial, User
+from models import ConceptMap, UploadedMaterial, User
 from schemas import (
     PDFUploadResponse, ImageAnalysisResponse, AudioTranscriptResponse,
     VideoAnalysisResponse, MaterialResponse,
@@ -410,6 +410,11 @@ def delete_material(material_id: int, db: Session = Depends(get_db), current_use
         raise HTTPException(status_code=404, detail="Material not found")
 
     delete_material_vectors(material_id, cast(str, material.file_type))
+    # its concept map (if any) would point at nothing
+    db.query(ConceptMap).filter(
+        ConceptMap.user_id == current_user.user_id,
+        ConceptMap.source_type == "material", ConceptMap.source_id == material_id,
+    ).delete()
     if material.stored_path:
         stored = UPLOAD_DIR / str(material.stored_path)
         if stored.exists():

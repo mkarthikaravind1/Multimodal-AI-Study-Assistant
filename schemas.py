@@ -437,3 +437,61 @@ class PlanItemUpdate(BaseModel):
 
 class ReplanRequest(BaseModel):
     today: date                      # the student's local date
+
+
+# ── Concept maps / mind maps ──────────────────────────────────────────────────
+class MapNode(BaseModel):
+    id: str
+    label: str
+    parent: str                      # "root" or an earlier node's id
+    relation: str
+    detail: str
+
+class MapLink(BaseModel):
+    model_config = {"populate_by_name": True}
+    from_: str = Field(alias="from")
+    to: str
+    label: str
+
+class MapGraph(BaseModel):
+    central: str
+    nodes: list[MapNode]
+    links: list[MapLink]
+
+class ConceptMapRequest(BaseModel):
+    source_type: Literal["note", "material"]
+    source_id: int
+    regenerate: bool = False         # False → return the saved map if there is one
+
+class ConceptMapOut(BaseModel):
+    map_id: int
+    source_type: str
+    source_id: int
+    source_kind: str                 # lesson | pdf | video
+    title: str
+    graph: MapGraph
+    created_at: datetime | None
+    updated_at: datetime | None
+
+class ConceptMapSummary(BaseModel):
+    map_id: int
+    source_type: str
+    source_id: int
+    title: str
+    nodes: int
+    created_at: datetime | None
+
+class MapSourceNote(BaseModel):
+    note_id: int
+    title: str
+    map_id: int | None
+
+class MapSourceMaterial(BaseModel):
+    material_id: int
+    filename: str
+    file_type: str
+    map_id: int | None
+
+class MapSources(BaseModel):
+    notes: list[MapSourceNote]
+    materials: list[MapSourceMaterial]

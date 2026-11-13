@@ -1,6 +1,6 @@
 from typing import cast
 from urllib.parse import quote_plus
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db, get_session_factory, utcnow, as_utc
@@ -148,6 +148,21 @@ def get_all_lessons(db: Session = Depends(get_db), current_user: User = Depends(
         }
         for n in notes
     ]
+
+@router.get("/{note_id}")
+def get_lesson(note_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """One lesson — used by the printable "Save as PDF" view."""
+    n = db.query(Note).filter(Note.note_id == note_id, Note.user_id == current_user.user_id).first()
+    if not n:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    return {
+        "note_id": n.note_id,
+        "title": n.title,
+        "content": n.content,
+        "youtube_links": n.youtube_links or [],
+        "created_at": as_utc(n.created_at),     # type: ignore
+    }
+
 
 @router.post("/regenerate-weak", response_model=LessonResponse)
 def regenerate_weak_topic(request: LessonRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

@@ -174,3 +174,17 @@ class ExamPlan(Base):
     syllabus_filename = Column(String(255), nullable=True)
     created_at        = Column(DateTime, default=utcnow)
     updated_at        = Column(DateTime, nullable=True)
+
+
+class ConceptMap(Base):
+    """A concept / mind map of one lesson or uploaded PDF / video (see Services/concept_map.py)."""
+    __tablename__ = "concept_maps"
+
+    map_id      = Column(Integer, primary_key=True, index=True)
+    user_id     = Column(Integer, ForeignKey("user_details.user_id"), nullable=False, index=True)
+    source_type = Column(String(10), nullable=False)      # note | material
+    source_id   = Column(Integer, nullable=False)         # note_id or material_id
+    title       = Column(String(255), nullable=False)
+    graph       = Column(JSON, nullable=False)            # {central, nodes, links}
+    created_at  = Column(DateTime, default=utcnow)
+    updated_at  = Column(DateTime, nullable=True)
