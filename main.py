@@ -18,6 +18,7 @@ from Routers.flashcards import router as flashcards_router
 from Routers.solutions import router as solutions_router
 from Routers.planner import router as planner_router
 from Routers.maps import router as maps_router
+from Routers.classes import router as classes_router
 
 load_dotenv()
 
@@ -74,3 +75,4 @@ app.include_router(flashcards_router)
 app.include_router(solutions_router)
 app.include_router(planner_router)
 app.include_router(maps_router)
+app.include_router(classes_router)

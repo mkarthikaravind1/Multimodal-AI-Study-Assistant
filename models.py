@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, Integer, String, DateTime, Date,
-    Text, JSON, DECIMAL, ForeignKey, Enum
+    Text, JSON, DECIMAL, ForeignKey, Enum, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from database import Base, utcnow
@@ -10,6 +10,7 @@ import enum
 class RoleEnum(str, enum.Enum):
     student = "student"
     admin = "admin"
+    teacher = "teacher"     # assigned by an admin (Admin panel or create_admin.py --teacher)
 
 class User(Base):
     __tablename__ = "user_details"
@@ -60,6 +61,8 @@ class QuizDetail(Base):
     submitted_at = Column(DateTime, nullable=True)   # NULL = generated but not submitted yet
     difficulty = Column(String(10), nullable=True)   # easy | medium | hard | mixed (NULL = older quiz)
     user_answers = Column(JSON, nullable=True)       # {question: answer} saved on submit
+    # A class assignment's attempt (and its fix-up retests) point at the assignment
+    assignment_id = Column(Integer, nullable=True, index=True)
     # Self-healing loop: a retest quiz points at the quiz it is fixing
     parent_quiz_id = Column(Integer, ForeignKey("quiz_details.quiz_id"), nullable=True)
     user_id = Column(Integer, ForeignKey("user_details.user_id"), nullable=False)
@@ -192,3 +195,47 @@ class ConceptMap(Base):
     graph       = Column(JSON, nullable=False)            # {central, nodes, links}
     created_at  = Column(DateTime, default=utcnow)
     updated_at  = Column(DateTime, nullable=True)
+
+
+class ClassRoom(Base):
+    """A teacher's class. Students join with the 6-character join_code."""
+    __tablename__ = "classes"
+
+    class_id   = Column(Integer, primary_key=True, index=True)
+    teacher_id = Column(Integer, ForeignKey("user_details.user_id"), nullable=False, index=True)
+    name       = Column(String(120), nullable=False)
+    subject    = Column(String(120), nullable=True)
+    join_code  = Column(String(6), nullable=False, unique=True, index=True)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class ClassMember(Base):
+    __tablename__ = "class_members"
+    __table_args__ = (UniqueConstraint("class_id", "student_id", name="uq_class_member"),)
+
+    member_id  = Column(Integer, primary_key=True, index=True)
+    class_id   = Column(Integer, ForeignKey("classes.class_id"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("user_details.user_id"), nullable=False, index=True)
+    joined_at  = Column(DateTime, default=utcnow)
+
+
+class Assignment(Base):
+    """
+    A quiz a teacher assigns to a class. The notes and questions are generated
+    once; each student gets their own copy (a Note + a QuizDetail with
+    assignment_id) when they start, so marking, analytics, flashcards and the
+    fix-up loop work exactly as for self-study quizzes.
+    """
+    __tablename__ = "class_assignments"
+
+    assignment_id  = Column(Integer, primary_key=True, index=True)
+    class_id       = Column(Integer, ForeignKey("classes.class_id"), nullable=False, index=True)
+    teacher_id     = Column(Integer, ForeignKey("user_details.user_id"), nullable=False)
+    title          = Column(String(200), nullable=False)
+    topic          = Column(String(200), nullable=False)
+    notes          = Column(Text, nullable=False)            # study notes the students get
+    questions      = Column(JSON, nullable=False)            # full questions (answers stay server-side)
+    question_types = Column(JSON, nullable=False)
+    difficulty     = Column(String(10), nullable=False)
+    due_date       = Column(Date, nullable=True)
+    created_at     = Column(DateTime, default=utcnow)

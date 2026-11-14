@@ -31,6 +31,7 @@ export default function Navbar() {
         <Link to="/check-work" className="hover:text-blue-200">Check Work</Link>
         <Link to="/planner" className="hover:text-blue-200">Planner</Link>
         <Link to="/maps" className="hover:text-blue-200">Maps</Link>
+        <Link to="/classes" className="hover:text-blue-200">Classes</Link>
       </div>
       <div className="flex items-center gap-4 text-sm flex-shrink-0">
         <LanguageMenu />

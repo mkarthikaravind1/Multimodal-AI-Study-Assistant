@@ -35,7 +35,7 @@ LanguageCode = Literal["en", "hi", "ta", "hinglish", "tanglish", "auto"]
 
 class MeResponse(BaseModel):
     username: str
-    role: str
+    role: str                     # student | teacher | admin
     student_class: str | None     # last education level the student used
     preferred_language: LanguageCode = "en"
 
@@ -525,3 +525,106 @@ class ChatSessionDetail(BaseModel):
 
 class ChatSessionRename(BaseModel):
     title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+
+
+# ── Teacher role: classes, assignments, heatmap ───────────────────────────────
+ClassName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+
+class RoleUpdate(BaseModel):
+    role: Literal["student", "teacher"]          # admins are made with create_admin.py
+
+class ClassCreate(BaseModel):
+    name: ClassName
+    subject: Annotated[str, StringConstraints(strip_whitespace=True, max_length=120)] | None = None
+
+class ClassUpdate(BaseModel):
+    name: ClassName | None = None
+    subject: Annotated[str, StringConstraints(strip_whitespace=True, max_length=120)] | None = None
+
+class JoinRequest(BaseModel):
+    code: Annotated[str, StringConstraints(strip_whitespace=True, min_length=4, max_length=12)]
+
+class ClassSummary(BaseModel):
+    class_id: int
+    name: str
+    subject: str | None
+    join_code: str | None            # only shown to the teacher
+    teacher: str
+    students: int
+    assignments: int
+    created_at: datetime | None
+
+class AssignmentCreate(BaseModel):
+    topic: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=200)]
+    title: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] | None = None
+    notes: Annotated[str, StringConstraints(strip_whitespace=True, max_length=20000)] | None = None   # empty → AI notes
+    question_types: list[QuestionType] = Field(default=["mcq", "true_false", "fill_blank"], min_length=1, max_length=4)
+    difficulty: Difficulty = "medium"
+    count: int = Field(default=5, ge=3, le=10)
+    due_date: date | None = None
+
+    @field_validator("question_types", mode="before")
+    @classmethod
+    def _dedupe_types(cls, value):
+        return list(dict.fromkeys(value)) if isinstance(value, list) else value
+
+class MyAssignmentStatus(BaseModel):
+    status: Literal["not_started", "in_progress", "submitted"]
+    quiz_id: int | None              # the student's own attempt
+    first_score: float | None
+    latest_score: float | None       # after fix-up retests
+
+class AssignmentOut(BaseModel):
+    assignment_id: int
+    title: str
+    topic: str
+    difficulty: str
+    question_types: list[str]
+    questions: int
+    due_date: date | None
+    created_at: datetime | None
+    submitted: int | None = None     # teacher: how many students have submitted
+    average: float | None = None     # teacher: class average of latest scores
+    mine: MyAssignmentStatus | None = None   # student: their own status
+
+class MemberOut(BaseModel):
+    student_id: int
+    username: str
+    joined_at: datetime | None
+
+class ClassDetail(BaseModel):
+    class_id: int
+    name: str
+    subject: str | None
+    join_code: str | None
+    teacher: str
+    is_teacher: bool
+    members: list[MemberOut]         # empty for students
+    assignments: list[AssignmentOut]
+    created_at: datetime | None
+
+class HeatCell(BaseModel):
+    status: Literal["not_started", "in_progress", "submitted"]
+    first_score: float | None
+    latest_score: float | None
+    attempts: int                    # submitted attempts incl. fix-up retests
+
+class HeatTopic(BaseModel):
+    topic: str
+    assignment_ids: list[int]
+    average: float | None            # class average of latest scores
+    submitted: int
+    weak_students: int               # latest score below 70
+
+class Heatmap(BaseModel):
+    class_id: int
+    students: list[MemberOut]
+    assignments: list[AssignmentOut]
+    cells: dict[str, dict[str, HeatCell]]      # {student_id: {assignment_id: cell}}
+    student_averages: dict[str, float | None]
+    topics: list[HeatTopic]                    # weakest first
+
+class StartAssignmentResponse(BaseModel):
+    quiz: QuizResponse
+    note_id: int
+    resumed: bool

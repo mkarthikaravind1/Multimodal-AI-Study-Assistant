@@ -610,8 +610,10 @@ export default function Quiz() {
   // Analytics can send us here to continue the loop for a weak topic
   const startLoopFor = location.state?.remediateQuizId ?? null;
 
-  const [phase, setPhase] = useState("setup"); // "setup" | "fixup" | "quiz" | "results"
-  const [quiz, setQuiz] = useState(null);
+  // Classes page → "Start" on an assignment opens its quiz directly
+  const assignmentQuiz = location.state?.assignmentQuiz ?? null;
+  const [phase, setPhase] = useState(assignmentQuiz ? "quiz" : "setup"); // "setup" | "fixup" | "quiz" | "results"
+  const [quiz, setQuiz] = useState(assignmentQuiz);
   const [result, setResult] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -647,6 +649,12 @@ export default function Quiz() {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startLoopFor]);
+
+  // don't re-open the assignment on refresh once it's in state here
+  useEffect(() => {
+    if (assignmentQuiz) navigate("/quiz", { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSubmit(answers) {
     setSubmitting(true);

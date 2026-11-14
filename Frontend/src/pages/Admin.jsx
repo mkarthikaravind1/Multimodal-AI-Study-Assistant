@@ -21,18 +21,50 @@ function StatCard({ label, value, icon, color }) {
   );
 }
 
+const ROLE_STYLES = {
+  admin: { label: "Admin", bg: "#EEF2FF", fg: "#4338CA" },
+  teacher: { label: "Teacher", bg: "#ECFDF5", fg: "#047857" },
+  student: { label: "Student", bg: "#F3F4F6", fg: "#6B7280" },
+};
+
 function RoleBadge({ role }) {
-  const isAdmin = role === "admin";
+  const r = ROLE_STYLES[role] ?? ROLE_STYLES.student;
   return (
-    <span
-      className="text-xs font-semibold px-2.5 py-1 rounded-full"
-      style={{
-        background: isAdmin ? "#EEF2FF" : "#F3F4F6",
-        color: isAdmin ? "#4338CA" : "#6B7280",
-      }}
-    >
-      {isAdmin ? "Admin" : "Student"}
+    <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: r.bg, color: r.fg }}>
+      {r.label}
     </span>
+  );
+}
+
+// Make a student a teacher, or a teacher a student again (admins are managed with create_admin.py)
+function RoleButton({ user, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  if (user.role === "admin") return <span className="text-xs text-gray-300">—</span>;
+  const next = user.role === "teacher" ? "student" : "teacher";
+
+  async function change() {
+    if (!window.confirm(`Make ${user.username} a ${next}?\n\nThey'll see the change after logging in again.`)) return;
+    setBusy(true);
+    try {
+      const res = await api.patch(`/admin/users/${user.user_id}/role`, { role: next });
+      onChanged(user.user_id, res.data.role, res.data.message);
+    } catch (err) {
+      onChanged(user.user_id, user.role, getErrorMessage(err, "Couldn't change the role."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={change}
+      disabled={busy}
+      className="text-xs px-2.5 py-1 rounded-lg border font-medium disabled:opacity-50"
+      style={next === "teacher" ? { borderColor: "#A7F3D0", color: "#047857" } : { borderColor: "#E5E7EB", color: "#6B7280" }}
+    >
+      {busy ? "Saving…" : next === "teacher" ? "Make teacher" : "Make student"}
+    </button>
   );
 }
 
@@ -51,6 +83,12 @@ export default function Admin() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [usersFailed, setUsersFailed] = useState(false);
+  const [roleMessage, setRoleMessage] = useState("");
+
+  function handleRoleChanged(userId, role, message) {
+    setUsers((prev) => prev.map((u) => (u.user_id === userId ? { ...u, role } : u)));
+    setRoleMessage(message);
+  }
 
   useEffect(() => {
     async function load() {
@@ -180,6 +218,9 @@ export default function Admin() {
             </div>
           ) : (
             <div className="overflow-x-auto">
+              {roleMessage && (
+                <p className="mx-6 mt-4 px-4 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 text-sm border border-emerald-100">{roleMessage}</p>
+              )}
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
@@ -188,6 +229,7 @@ export default function Admin() {
                     <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Class</th>
                     <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Role</th>
                     <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Registered</th>
+                    <th className="text-left px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Change role</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -209,6 +251,7 @@ export default function Admin() {
                             })
                           : "—"}
                       </td>
+                      <td className="px-6 py-3.5"><RoleButton user={u} onChanged={handleRoleChanged} /></td>
                     </tr>
                   ))}
                 </tbody>

@@ -132,6 +132,7 @@ def remediate(request: RemediateRequest, db: Session = Depends(get_db), current_
         user_id=current_user.user_id,
         note_id=note.note_id,
         parent_quiz_id=quiz.quiz_id,
+        assignment_id=quiz.assignment_id,      # class assignment: the retest counts towards it
     )
     db.add(retest)
     db.commit()

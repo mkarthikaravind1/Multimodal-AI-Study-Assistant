@@ -38,6 +38,12 @@ An AI-powered learning platform that helps students learn better by generating q
 - **Spaced-repetition flashcards (SM-2)** — cards made by AI from any lesson, plus every wrong quiz answer and
   weak viva answer turned into a card automatically. A daily review queue (Again / Hard / Good / Easy, with keyboard
   shortcuts) schedules each card right before you'd forget it. One-click export to Anki.
+- **Teachers & classes** — an admin makes someone a teacher (Admin panel button, or `create_admin.py <name> --teacher`).
+  Teachers create classes and share a 6-character join code; students join from their Classes page. A teacher assigns a
+  quiz on a topic (AI notes, or paste their own) with question types, difficulty and an optional due date — every student
+  gets their own copy of the notes and quiz, so marking, explanations, flashcards and the fix-up loop all work as usual.
+  The **class heatmap** shows every student × every assignment (first try → latest after fix-up retests), class and
+  student averages, and the weakest topics first. Only class-assignment results are shared — students' own study stays private.
 - **Chat history & materials library** — every tutor chat is kept in a sidebar (Today / Yesterday / …): resume it,
   rename it, delete it, or search across all your chats' titles *and* messages. The **Library** lists everything you've
   uploaded — open it, map it, delete it (its indexed text goes too), or **"Ask about this"**: the tutor then searches
@@ -184,7 +190,8 @@ New sign-ups are always students. To create an admin (or promote an existing use
 python create_admin.py <username>
 ```
 
-You'll be asked for the password at a hidden prompt. Use `--demote` to turn an admin back into a student.
+You'll be asked for the password at a hidden prompt. Use `--teacher` to make someone a teacher instead
+(admins can also do this from the Admin panel), and `--demote` to turn an admin or teacher back into a student.
 
 ---
 
@@ -346,6 +353,13 @@ The platform has two independent content pipelines that converge at a single ret
 | POST | `/planner/plans/{id}/replan` | Rebuild the rest of the plan from today |
 | GET | `/planner/plans/{id}/ics` | Calendar file (`?start_time=18:00`) |
 | GET | `/admin/users` | List all users *(admin only)* |
+| PATCH | `/admin/users/{id}/role` | Make a user a teacher or a student *(admin only)* |
+| GET / POST | `/classes` | My classes / create a class *(teacher)* |
+| POST | `/classes/join` | Join with a 6-character code *(student)* |
+| GET | `/classes/{id}` | Class: roster + stats (teacher) or my assignments (student) |
+| POST | `/classes/{id}/assignments` | Assign a quiz *(teacher)* |
+| POST | `/classes/assignments/{id}/start` | Get my copy of an assignment's notes + quiz *(student)* |
+| GET | `/classes/{id}/heatmap` | Students × assignments, weakest topics first *(teacher)* |
 | GET | `/admin/stats` | Platform usage stats *(admin only)* |
 
 ---
